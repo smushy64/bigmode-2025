@@ -58,10 +58,10 @@ Binary will be in `build/windows` or `build/linux` depending on platform.
 
 ## Credits
 
-- [smushy](https://github.com/smushy64)  : Programmer and Artist
-- sir geo : Artist
-- grib    : Artist
-- clayton : Music
+- [smushy](https://github.com/smushy64) : Programmer and Artist
+- sir geo                               : Artist
+- grib                                  : Artist
+- Clayton Dryden                        : Music
 
 ### External Resources
 
