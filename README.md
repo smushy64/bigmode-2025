@@ -2,6 +2,10 @@
 
 ![BIGMODE Logo](./resources/textures/bigmode/logo-text.png)
 
+[Play it now on itch.io!](https://smushy64.itch.io/bigmode-2025)
+
+Written in C using [raylib](https://www.raylib.com/).
+
 ## How-To Build
 
 ### Windows Requirements
@@ -59,11 +63,15 @@ Binary will be in `build/windows` or `build/linux` depending on platform.
 ## Credits
 
 - [smushy](https://github.com/smushy64) : Programmer and Artist
-- sir geo                               : Artist
-- grib                                  : Artist
+- Sir Geo                               : Artist
+- Grib                                  : Artist
 - Clayton Dryden                        : Music
 
 ### External Resources
 
 - [raylib](https://www.raylib.com/)
+
+### Links
+
+- [itch.io](https://smushy64.itch.io/bigmode-2025)
 
