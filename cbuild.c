@@ -34,8 +34,8 @@
     "src/main.cpp", "-Isrc", "-Iraylib/src", "-Wall"
 
 #define WINDOWS_ARGS \
-    COMMON_ARGS, "-Lvendor/windows", "-l:libraylib.a", "-lgdi32", "-lwinmm", \
-    "-lopengl32", "-lshell32", "-static-libgcc", "-o", "build/windows/" GAME_NAME ".exe"
+    COMMON_ARGS, "-Lvendor/windows", "-l:libraylib.a", "-static-libgcc", "-static", "-lgdi32", "-lwinmm", \
+    "-lopengl32", "-lshell32", "-o", "build/windows/" GAME_NAME ".exe"
 
 #define GNU_LINUX_ARGS \
     COMMON_ARGS, "-Lvendor/linux", "-l:libraylib.a", \

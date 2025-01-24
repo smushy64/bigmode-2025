@@ -13,14 +13,15 @@ Written in C using [raylib](https://www.raylib.com/).
 
 ### Linux Requirements
 - `gcc`, `g++` and `ar`
-- standard `-dev` packages
 - For Windows cross-compilation: `mingw-w64-gcc`, `mingw-w64-g++`, `mingw-w64-ar`
 
 ### Web Requirements
-- [emscripten](https://emscripten.org/) (emcc, em++, emar)
+- [emscripten](https://emscripten.org/) ( `emcc`, `em++`, `emar` )
 
 ### Miscellaneous
-- For generating packaged files: zip
+- `zip` : for generating packaged files.
+
+### Native Build
 
 1) Make sure that raylib submodule is initialized.
 
@@ -40,7 +41,7 @@ gcc cbuild.c -o cbuild
 ./cbuild build
 ```
 
-Binary will be in `build/windows` or `build/linux` depending on platform.
+Binary will be in `build/windows` or `build/linux` depending on the target platform.
 
 ### Web build
 
@@ -48,7 +49,7 @@ Binary will be in `build/windows` or `build/linux` depending on platform.
 ./cbuild build -target=web
 ```
 
-[!NOTE]
+**NOTE**  
 `emscripten` is required.
 
 ### Packaging
@@ -57,15 +58,15 @@ Binary will be in `build/windows` or `build/linux` depending on platform.
 ./cbuild package
 ```
 
-[!NOTE]
+**NOTE**  
 `zip` is required.
 
 ## Credits
 
-- [smushy](https://github.com/smushy64) : Programmer and Artist
-- Sir Geo                               : Artist
-- Grib                                  : Artist
-- Clayton Dryden                        : Music
+- [Alicia Amarilla](https//github.com/smushy64)              : Programmer and Artist
+- [Sergio Marmarian](https//www.artstation.com/ngontopology) : Artist
+- [Jack Ma](https://jackmatoons.carrd.co/)                   : Artist
+- [Clayton Dryden](https://soundcloud.com/claydryn)          : Music
 
 ### External Resources
 
