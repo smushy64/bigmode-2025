@@ -8,6 +8,11 @@
 */
 #include "raylib.h"
 #include "modes.h"
+#include "gui.h"
+
+#define WINDOW_WIDTH  1280
+#define WINDOW_HEIGHT  720
+#define WINDOW_NAME   "BIGMODE Game Jam 2025"
 
 struct GlobalState {
     float timer;
@@ -18,7 +23,9 @@ struct GlobalState {
             Texture bigmode_logo;
         } intro;
         struct {
-
+            bool is_options_open;
+            bool is_credits_open;
+            GuiOptionsMenu options_state;
         } main_menu;
         struct {
 
@@ -30,7 +37,7 @@ struct GlobalState {
 
     inline
     void set_mode( Mode mode ) {
-        unload_mode( mode );
+        unload_mode( this->mode );
         load_mode( mode );
     }
 };

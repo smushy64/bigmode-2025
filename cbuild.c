@@ -11,6 +11,15 @@
 // 1 gib
 #define TOTAL_MEMORY 536870912
 
+#define WINDOWS_EXE \
+    GAME_NAME "-windows-x86-64.exe"
+
+#define GNU_LINUX_EXE \
+    GAME_NAME "-linux-x86-64"
+
+#define WEB_EXE \
+    GAME_NAME "-web-wasm32"
+
 #define COMMON_RAYLIB_ARGS \
     "-c", "-Wno-missing-braces", "-Werror=pointer-arith", "-fno-strict-aliasing", \
     "-std=c99", "-O1", "-Wall", "-Werror=implicit-function-declaration", \
@@ -35,12 +44,12 @@
 
 #define WINDOWS_ARGS \
     COMMON_ARGS, "-Lvendor/windows", "-l:libraylib.a", "-static-libgcc", "-static", "-lgdi32", "-lwinmm", \
-    "-lopengl32", "-lshell32", "-o", "build/windows/" GAME_NAME ".exe"
+    "-lopengl32", "-lshell32", "-o", "build/windows/" WINDOWS_EXE
 
 #define GNU_LINUX_ARGS \
     COMMON_ARGS, "-Lvendor/linux", "-l:libraylib.a", \
     "-lGL", "-lm", "-lpthread", "-ldl", "-lrt", "-lX11", "-static-libgcc", \
-    "-o", "build/linux/" GAME_NAME
+    "-o", "build/linux/" GNU_LINUX_EXE 
 
 #define WEB_ARGS \
     COMMON_ARGS, "vendor/web/libraylib.a", \
@@ -48,7 +57,7 @@
     "--shell-file", "raylib/src/minshell.html", \
     "-sTOTAL_MEMORY=" macro_value_to_string(TOTAL_MEMORY), \
     "--preload-file", "resources", \
-    "-o", "build/web/" GAME_NAME ".html", "-DPLATFORM_WEB", \
+    "-o", "build/web/" WEB_EXE ".html", "-DPLATFORM_WEB", \
     "-sERROR_ON_UNDEFINED_SYMBOLS=0"
 
 #if defined(PLATFORM_WINDOWS)
@@ -274,8 +283,22 @@ int mode_run( struct Args* args ) {
         return result;
     }
 
+    const char* executable = GAME_NAME;
+    switch( args->build.target ) {
+        case T_GNU_LINUX: {
+            executable = GNU_LINUX_EXE;
+        } break;
+        case T_WINDOWS: {
+            executable = WINDOWS_EXE;
+        } break;
+
+        case T_WEB:    break;
+        case T_NATIVE: break;
+        case T_COUNT:  break;
+    }
+
     const char* name = local_fmt(
-        "build/%s/" GAME_NAME EXE_EXT, target_to_string(args->build.target).cc );
+        "build/%s/%s", target_to_string(args->build.target).cc, executable );
     cb_info( "Running with command %s . . .", name );
 
     Command cmd = command_new( name );
@@ -336,12 +359,12 @@ int mode_package( struct Args* args ) {
         cb_error( "Failed to copy zipped resources!" );
         return 1;
     }
-    if( !file_move( "build/windows/bigmode-2025-win32-x86-64.zip", "resources.zip" )) {
+    if( !file_move( "build/windows/bigmode-2025-windows-x86-64.zip", "resources.zip" )) {
         cb_error( "Failed to move zipped resources!" );
         return 1;
     }
 #else
-    if( !file_move( "build/windows/bigmode-2025-win32-x86-64.zip", "resources.zip" )) {
+    if( !file_move( "build/windows/bigmode-2025-windows-x86-64.zip", "resources.zip" )) {
         cb_error( "Failed to move zipped resources!" );
         return 1;
     }
@@ -349,7 +372,7 @@ int mode_package( struct Args* args ) {
 
 #if defined(PLATFORM_LINUX)
     chdir( "build/linux" );
-    result = quick_cmd( "zip", "bigmode-2025-linux-x86-64.zip", GAME_NAME );
+    result = quick_cmd( "zip", "bigmode-2025-linux-x86-64.zip", GNU_LINUX_EXE );
     if( result ) {
         cb_error( "Failed to zip linux version!" );
         chdir( "../.." );
@@ -358,7 +381,7 @@ int mode_package( struct Args* args ) {
 
     chdir( "../windows" );
 
-    result = quick_cmd( "zip", "bigmode-2025-win32-x86-64.zip", GAME_NAME ".exe" );
+    result = quick_cmd( "zip", "bigmode-2025-win32-x86-64.zip", WINDOWS_EXE );
     chdir( "../.." );
     if( result ) {
         cb_error( "Failed to zip windows version!" );
@@ -368,7 +391,7 @@ int mode_package( struct Args* args ) {
 #else
     chdir( "build/windows" );
 
-    result = quick_cmd( "zip", "bigmode-2025-win32-x86-64.zip", GAME_NAME ".exe" );
+    result = quick_cmd( "zip", "bigmode-2025-win32-x86-64.zip", WINDOWS_EXE );
     chdir( "../.." );
     if( result ) {
         cb_error( "Failed to zip windows version!" );
@@ -460,8 +483,8 @@ int build_web( const char* cpp, struct Build* build ) {
         }
     }
 
-    if( !file_move( "build/web/index.html", "build/web/" GAME_NAME ".html" ) ) {
-        cb_error( "Failed to rename " GAME_NAME ".html to index.html!" );
+    if( !file_move( "build/web/index.html", "build/web/" WEB_EXE ".html" ) ) {
+        cb_error( "Failed to rename " WEB_EXE ".html to index.html!" );
         return 1;
     }
 
@@ -783,373 +806,6 @@ bool target_is_native( enum Target target ) {
         case T_COUNT:     return false;
     }
 }
-
-#if 0 
-
-#define stringify(macro) #macro
-#define stringify_value(macro) stringify(macro)
-
-#define GAME_NAME "bigmode2025"
-// 1 gib
-#define WEB_MAX_MEMORY 536870912
-
-#if defined(PLATFORM_WINDOWS)
-    #define BUILD_PATH_NATIVE "./build/native/" GAME_NAME ".exe"
-#else
-    #define BUILD_PATH_NATIVE "./build/native/" GAME_NAME
-#endif
-
-#define BUILD_PATH_WEB "./build/web/index.html"
-
-enum Target {
-    T_NATIVE,
-    T_WINDOWS,
-    T_GNU_LINUX,
-    T_WEB,
-};
-
-int compile_raylib( enum Target target );
-void print_help(void);
-b32 dir_create_checked( const char* path );
-int main( int argc, const char** argv ) {
-    init( LOGGER_LEVEL_INFO );
-
-    f64 start_time = timer_milliseconds();
-
-    enum Target target = T_NATIVE;
-    b32 test           = false;
-    b32 release        = false;
-    b32 package        = false;
-
-    for( int i = 1; i < argc; ++i ) {
-        String arg = string_from_cstr( argv[i] );
-
-        if( string_cmp( arg, string_text( "--help" ) ) ) {
-            print_help();
-            return 0;
-        }
-
-        if( string_cmp(
-            string_truncate( arg, sizeof("--target")),
-            string_text("--target=")
-        )) {
-            String target_string = string_advance_by( arg, sizeof("--target"));
-
-            if( string_cmp(
-                target_string, string_text("native")
-            ) ) {
-                target = T_NATIVE;
-                continue;
-            } else if( string_cmp(
-                target_string, string_text( "web" )
-            ) ) {
-                target = T_WEB;
-                continue;
-            }
-
-        }
-
-        if( string_cmp( arg, string_text( "--test" ) ) ) {
-            test = true;
-            continue;
-        }
-
-        if( string_cmp( arg, string_text( "--release" ) ) ) {
-            release = true;
-            continue;
-        }
-
-        if( string_cmp( arg, string_text( "--package" ) ) ) {
-            package = true;
-            continue;
-        }
-
-        cb_error( "unrecognized argument '%.*s'!", arg.len, arg.cc );
-        print_help();
-        return -1;
-    }
-
-    if( package ) {
-        if( test ) {
-            cb_warn(
-                "--package and --test cannot be combined! "
-                "--package overrides --test" );
-        }
-        release = true;
-        test    = false;
-
-        if( path_exists( "./build" ) ) {
-            dir_remove( "./build", true );
-        }
-    }
-
-    if( !dir_create_checked( "./vendor" ) ) {
-        return -1;
-    }
-    if( !dir_create_checked( "./build") ) {
-        return -1;
-    }
-
-    Command cmd = command_null();
-
-    if( !process_in_path( "clang" ) ) {
-        cb_error( "clang is required in path!" );
-        return -1;
-    }
-
-    const char* build_path = "";
-    switch( target ) {
-        case T_NATIVE: {
-            if( !dir_create_checked( "./build/native" ) ) {
-                return -1;
-            }
-            if( !dir_create_checked( "./vendor/native" ) ) {
-                return -1;
-            }
-
-            if( !path_exists( "./vendor/native/libraylib.a" ) ) {
-                int res = compile_raylib( target );
-                if( res ) {
-                    return res;
-                }
-                cb_info( "compiled raylib for native platform!" );
-            }
-
-            build_path = BUILD_PATH_NATIVE;
-            if( release ) {
-                cmd = command_new(
-                    "clang", "src/sources.c",
-                    "vendor/native/libraylib.a",
-                    "-Isrc", "-Iraylib/src",
-                    "-static-libgcc", "-O2",
-                    #if defined(PLATFORM_WINDOWS)
-                        "-lraylib", "-lgdi32", "-lwinmm", "-lopengl32",
-                        "-fuse-ld=lld", "-Wl,--subsystem,windows",
-                    #elif defined(PLATFORM_LINUX)
-                        "-lGL", "-lm", "-lpthread", "-ldl", "-lrt", "-lX11",
-                    #endif
-                    "-Werror", "-Wall", "-Wextra", "-Werror=vla", "-o",
-                    build_path );
-            } else {
-                cmd = command_new(
-                    "clang", "src/sources.c",
-                    "vendor/native/libraylib.a",
-                    "-Isrc", "-Iraylib/src", "-DDEBUG",
-                    "-static-libgcc", "-O0", "-g",
-                    #if defined(PLATFORM_WINDOWS)
-                        "-fuse-ld=lld", "-Wl,/debug", "-gcodeview",
-                        "-lraylib", "-lgdi32", "-lwinmm", "-lopengl32",
-                    #elif defined(PLATFORM_LINUX)
-                        "-lGL", "-lm", "-lpthread", "-ldl", "-lrt", "-lX11",
-                    #endif
-                    "-Wall", "-Wextra", "-Werror=vla", "-o",
-                    build_path );
-            }
-
-        } break;
-        case T_WEB: {
-            if( !dir_create_checked( "./build/web" ) ) {
-                return -1;
-            }
-            if( !dir_create_checked( "./vendor/web" ) ) {
-                return -1;
-            }
-
-            if( !process_in_path( "emcc" ) ) {
-                cb_error( "emscripten is required in path!" );
-                return -1;
-            }
-
-            if( !path_exists( "./vendor/web/libraylib.a" ) ) {
-                int res = compile_raylib( target );
-                if( res ) {
-                    return res;
-                }
-                cb_info( "compiled raylib for web platform!" );
-            }
-
-            build_path = BUILD_PATH_WEB;
-            const char* max_mem = "TOTAL_MEMORY=" stringify_value(WEB_MAX_MEMORY);
-
-            if(release) {
-                cmd = command_new(
-                    #if defined(PLATFORM_WINDOWS)
-                        "cmd", "/C", "emcc.bat",
-                    #else
-                        "sh", "-c", "emcc.sh",
-                    #endif
-                    "-o", build_path,
-                    "src/sources.c",
-                    "vendor/web/libraylib.a",
-                    "-Os", "-Wall", "-Wextra", "-Werror=vla",
-                    "-Werror", "-Isrc", "-Iraylib/src",
-                    "-s", "USE_GLFW=3",
-                    "-s", max_mem,
-                    "--shell-file", "raylib/src/minshell.html",
-                    "-DPLATFORM_WEB",
-                    "--preload-file", "resources" );
-            } else {
-                cmd = command_new(
-                    #if defined(PLATFORM_WINDOWS)
-                        "cmd", "/C", "emcc.bat",
-                    #else
-                        "sh", "-c", "emcc.sh",
-                    #endif
-                    "-o", build_path,
-                    "src/sources.c",
-                    "vendor/web/libraylib.a",
-                    "-g", "-O0", "-Wall", "-Wextra", "-Werror=vla",
-                    "-Isrc", "-Iraylib/src", "-DDEBUG",
-                    "-s", "USE_GLFW=3",
-                    "-s", max_mem,
-                    "--shell-file", "raylib/src/minshell.html",
-                    "-DPLATFORM_WEB",
-                    "--preload-file", "resources" );
-            }
-        } break;
-    }
-
-    if( release ) {
-        cb_info( "building project in release mode . . ." );
-    } else {
-        cb_info( "building project in debug mode . . ." );
-    }
-    PID pid = process_exec( cmd, false, NULL, NULL, NULL, NULL );
-    int res = process_wait( pid );
-
-    if( !res ) {
-        f64 end_time = timer_milliseconds();
-        cb_info( "build completed in %fms", end_time - start_time );
-
-        cb_info( "built project successfully at path '%s'!", build_path );
-    } else {
-        cb_error( "failed to build '%s'!", build_path );
-        return res;
-    }
-
-    if( test ) {
-        switch( target ) {
-            case T_NATIVE: {
-                cb_info( "testing project . . ." );
-                Command test_cmd = command_new( build_path );
-                PID test_pid = process_exec( test_cmd, false, NULL, NULL, NULL, NULL );
-                int test_res = process_wait( test_pid );
-                cb_info( "project exited with code %i", test_res );
-            } break;
-            case T_WEB: {
-                cb_warn( "cannot automatically test web project!" );
-            } break;
-        }
-    }
-
-    if( package ) {
-        if( !process_in_path( "zip" ) ) {
-            cb_error( "zip is required for packaging project!" );
-            return -1;
-        }
-
-        Command cmd = command_new( "zip", GAME_NAME, "resources", "-r" );
-        PID pid = process_exec( cmd, false, NULL, NULL, NULL, NULL );
-        int res = process_wait( pid );
-        if( res ) {
-            cb_error( "failed to zip project!" );
-            return -1;
-        }
-
-        switch( target ) {
-            case T_NATIVE: {
-                if( !file_move(
-                    "./build/native/" GAME_NAME ".zip",
-                    GAME_NAME ".zip"
-                ) ) {
-                    cb_error( "failed to move zipped resources to build directory!" );
-                    return -1;
-                }
-
-                const char* build_path =
-                    GAME_NAME
-                    #if defined(PLATFORM_WINDOWS)
-                        ".exe"
-                    #endif
-                    ;
-                cmd = command_new(
-                    "zip", GAME_NAME ".zip",
-                    build_path );
-
-                pid = process_exec( cmd, false, NULL, NULL, NULL, "./build/native" );
-                res = process_wait( pid );
-                if( res ) {
-                    cb_error( "failed to zip project!" );
-                    return -1;
-                }
-                cb_info( "zipped project at path ./build/native/" GAME_NAME ".zip!" );
-            } break;
-            case T_WEB: {
-                if( !file_move(
-                    "./build/web/" GAME_NAME ".zip",
-                    GAME_NAME ".zip"
-                ) ) {
-                    cb_error( "failed to move zipped resources to build directory!" );
-                    return -1;
-                }
-
-                cmd = command_new( "zip", GAME_NAME ".zip", "*" );
-                pid = process_exec( cmd, false, NULL, NULL, NULL, "./build/web" );
-                res = process_wait( pid );
-                if( res ) {
-                    cb_error( "failed to zip project!" );
-                    return -1;
-                }
-                cb_info( "zipped project at path ./build/web/" GAME_NAME ".zip!" );
-            } break;
-        }
-    }
-
-    return 0;
-}
-
-int compile_raylib( enum Target target ) {
-    switch( target ) {
-        case T_NATIVE: {
-            cb_info( "compiling raylib for native platform . . ." );
-            Command cmd =
-                command_new(
-                    "make", "-C", "./raylib/src", "-B",
-                    "PLATFORM=PLATFORM_DESKTOP",
-                    "CC=clang", "RAYLIB_RELEASE_PATH=../../vendor/native" );
-            PID pid = process_exec( cmd, false, NULL, NULL, NULL, NULL );
-            int res = process_wait( pid );
-            if( res ) {
-                cb_error( "failed to compile raylib for native platform!" );
-                return res;
-            }
-        } break;
-        case T_WEB: {
-            cb_info( "compiling raylib for web . . ." );
-            Command cmd =
-                command_new(
-                    "make", "-C", "./raylib/src", "-B",
-                    "PLATFORM=PLATFORM_WEB",
-                    "RAYLIB_RELEASE_PATH=../../vendor/web" );
-            PID pid = process_exec( cmd, false, NULL, NULL, NULL, NULL );
-            int res = process_wait( pid );
-            if( res ) {
-                cb_error( "failed to compile raylib for web platform!" );
-                return res;
-            }
-        } break;
-    }
-    Command cmd = command_new(
-        "make", "-C", "./raylib/src", "clean", "PLATFORM_SHELL=sh" );
-    PID pid = process_exec( cmd, false, NULL, NULL, NULL, NULL );
-    int res = process_wait( pid );
-    if( res ) {
-        cb_warn( "failed to remove raylib sources!" );
-    }
-    return 0;
-}
-
-#endif
 
 #define CBUILD_IMPLEMENTATION
 #include "cbuild.h"

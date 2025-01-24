@@ -9,7 +9,7 @@ Written in C using [raylib](https://www.raylib.com/).
 ## How-To Build
 
 ### Windows Requirements
-- [MinGW w64 with MSYS2](https://www.msys2.org/)
+- [MinGW w64 (MSYS2)](https://www.msys2.org/)
 
 ### Linux Requirements
 - `gcc`, `g++` and `ar`

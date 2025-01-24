@@ -6,6 +6,19 @@
 */
 #include "blit.h"
 
+Vector2 get_screen() {
+    return {
+        (float)GetScreenWidth(),
+        (float)GetScreenHeight()
+    };
+}
+
+Vector2 rect_pos( Rectangle& rect ) {
+    return *(Vector2*)&rect;
+}
+Vector2 rect_size( Rectangle& rect ) {
+    return *(Vector2*)&rect.width;
+}
 void rect_set_pos( Rectangle& rect, Vector2 pos ) {
     *(Vector2*)&rect = pos;
 }

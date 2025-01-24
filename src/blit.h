@@ -9,6 +9,11 @@
 #include "raylib.h"
 #include "raymath.h"
 
+Vector2 get_screen();
+
+Vector2 rect_pos( Rectangle& rect );
+Vector2 rect_size( Rectangle& rect );
+
 void rect_set_pos( Rectangle& rect, Vector2 pos );
 void rect_set_size( Rectangle& rect, Vector2 size );
 Vector2 texture_size( Texture& texture );

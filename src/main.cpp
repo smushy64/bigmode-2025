@@ -6,13 +6,16 @@
 */
 #include "raylib.h"
 #include "entry.cpp"
+#include "state.h"
 
 #if defined(PLATFORM_WEB)
     #include <emscripten/emscripten.h>
 #endif
 
+bool should_exit = false;
+
 int main() {
-    InitWindow( 800, 600, "Hello, World!" );
+    InitWindow( WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_NAME );
 
     if( !initialize() ) {
         return 1;
@@ -21,9 +24,13 @@ int main() {
 #if defined(PLATFORM_WEB)
     emscripten_set_main_loop( update, 0, 1 );
 #else
-    SetTargetFPS(60);
+    SetExitKey( KEY_ZERO );
+    SetTargetFPS( 60 );
     while( !WindowShouldClose() ) {
         update();
+        if( should_exit ) {
+            break;
+        }
     }
 #endif
 
@@ -34,4 +41,5 @@ int main() {
 #define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
 #include "blit.cpp"
+#include "gui.cpp"
 

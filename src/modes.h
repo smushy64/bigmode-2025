@@ -14,9 +14,9 @@ enum class Mode {
     GAME,
 };
 
-void mode_intro( GlobalState* state, float dt );
-void mode_main_menu( GlobalState* state, float dt );
-void mode_game( GlobalState* state, float dt );
+bool mode_intro( GlobalState* state, float dt );
+bool mode_main_menu( GlobalState* state, float dt );
+bool mode_game( GlobalState* state, float dt );
 
 inline
 const char* to_string( Mode mode ) {

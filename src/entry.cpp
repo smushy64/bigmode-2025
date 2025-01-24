@@ -11,9 +11,11 @@
 #include "blit.h"
 #include "modes.h"
 #include "state.h"
+#include "gui.h"
 
-#define INTRO_MAX_TIME               2.5
-#define INTRO_LOGO_TIME_LOGO_VISIBLE 1.2
+#include <string.h>
+
+#define START_MODE Mode::INTRO
 
 GlobalState* global_state;
 
@@ -24,28 +26,34 @@ bool initialize() {
     }
     auto* state = global_state;
 
-    state->load_mode( Mode::INTRO );
+    state->load_mode( START_MODE );
 
     GuiLoadStyle( "resources/ui/styles/dark/style_dark.rgs" );
     return true;
 }
 
+extern bool should_exit;
 void update() {
     auto* state = global_state;
     BeginDrawing();
-    ClearBackground( BLACK );
 
     float dt = GetFrameTime();
 
     switch( state->mode ) {
         case Mode::INTRO: {
-            mode_intro( state, dt );
+            if( !mode_intro( state, dt ) ) {
+                should_exit = true;
+            }
         } break;
         case Mode::MAIN_MENU: {
-            mode_main_menu( state, dt );
+            if( !mode_main_menu( state, dt ) ) {
+                should_exit = true;
+            }
         } break;
         case Mode::GAME: {
-            mode_game( state, dt );
+            if( !mode_game( state, dt ) ) {
+                should_exit = true;
+            }
         } break;
     }
 
@@ -57,7 +65,7 @@ void update() {
 void GlobalState::load_mode( Mode mode ) {
     switch( mode ) {
         case Mode::INTRO: {
-            intro.bigmode_logo = LoadTexture( "resources/textures/bigmode/logo-text.png" );
+            intro.bigmode_logo = LoadTexture( "resources/textures/logo.png" );
             SetTextureFilter( intro.bigmode_logo, TEXTURE_FILTER_BILINEAR );
         } break;
         case Mode::MAIN_MENU: {
@@ -85,35 +93,106 @@ void GlobalState::unload_mode( Mode mode ) {
         } break;
     }
 
+    char* clear_from = (char*)(&this->mode + 1);
+    memset( clear_from, 0, sizeof(GlobalState) - (clear_from - (char*)this) );
+
     TraceLog( LOG_INFO, "Unloaded mode %s.", to_string(mode) );
 }
 
-void mode_intro( GlobalState* state, float dt ) {
-    if( state->timer >= INTRO_MAX_TIME ) {
+bool mode_intro( GlobalState* state, float dt ) {
+    #define INTRO_LENGTH 1.25
+
+    if( state->timer >= INTRO_LENGTH ) {
         state->set_mode( Mode::MAIN_MENU );
-        return;
+        return true;
     }
 
-    Vector2 screen;
-    screen.x = GetScreenWidth();
-    screen.y = GetScreenHeight();
+    ClearBackground( { 20, 199, 195, 255 } );
+
+    Vector2 screen = get_screen();
 
     Rectangle src, dst;
 
     src = {};
     rect_set_size( src, texture_size( state->intro.bigmode_logo ) );
+    src.y      = 1.0;
+    src.height = 94.0;
 
-    dst = centered_fit_to_screen( screen, texture_size( state->intro.bigmode_logo ) );
+    dst = centered_fit_to_screen( screen, rect_size(src) );
 
-    Color tint = ColorLerp( Color{}, WHITE, state->timer / INTRO_LOGO_TIME_LOGO_VISIBLE );
+    float t = state->timer / INTRO_LENGTH;
 
-    DrawTexturePro( state->intro.bigmode_logo, src, dst, {}, 0.0, tint );
+    t = fmin( sin( t * M_PI ) * 2.0, 1.0 );
+
+    DrawTexturePro( state->intro.bigmode_logo, src, dst, {}, 0.0, WHITE );
+
+    Color tint = ColorLerp( BLACK, {0, 0, 0, 0}, t );
+    DrawRectangle( 0, 0, screen.x, screen.y, tint );
+
+    return true;
 }
-void mode_main_menu( GlobalState* state, float dt ) {
+bool mode_main_menu( GlobalState* state, float dt ) {
+    ClearBackground( BLACK );
 
+    Vector2 screen = get_screen();
+
+    if( !(state->main_menu.is_credits_open || state->main_menu.is_options_open) ) {
+
+        Vector2 text_measure = MeasureTextEx(
+            GetFontDefault(), "BIGMODE Game Jam 2025", 24.0, 1.0 );
+        DrawTextPro(
+            GetFontDefault(), "BIGMODE Game Jam 2025",
+            {screen.x / 2.0f, (screen.y / 2.0f) - 24.0f},
+            text_measure / 2.0, 0.0, 24.0, 1.0, WHITE );
+
+        Rectangle button_rect = { screen.x / 2.0f, screen.y / 2.0f, 95.0, 35.0 };
+        button_rect.x -= button_rect.width / 2.0;
+
+        float spacing = button_rect.height + 6.0;
+
+        if( GuiButton( button_rect, "Start Game" ) ) {
+            state->set_mode( Mode::GAME );
+        }
+
+        button_rect.y += spacing;
+
+        if( GuiButton( button_rect, "Options" ) ) {
+            state->main_menu.is_options_open = !state->main_menu.is_options_open;
+        }
+
+        button_rect.y += spacing;
+
+        if( GuiButton( button_rect, "Credits" ) ) {
+            state->main_menu.is_credits_open = !state->main_menu.is_credits_open;
+        }
+
+#if !defined(PLATFORM_WEB)
+        button_rect.y += spacing;
+
+        if( GuiButton( button_rect, "Quit Game" ) ) {
+            return false;
+        }
+#endif
+
+    } else {
+        if( state->main_menu.is_options_open ) {
+            if( draw_options_menu( state->main_menu.options_state ) ) {
+                state->main_menu.is_options_open = false;
+            }
+        }
+
+        if( state->main_menu.is_credits_open ) {
+            if( draw_credits_menu() ) {
+                state->main_menu.is_credits_open = false;
+            }
+        }
+    }
+
+    return true;
 }
-void mode_game( GlobalState* state, float dt ) {
-
+bool mode_game( GlobalState* state, float dt ) {
+    ClearBackground( BLACK );
+    return true;
 }
 
 
