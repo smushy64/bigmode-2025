@@ -31,3 +31,7 @@ int main() {
     return 0;
 }
 
+#define RAYGUI_IMPLEMENTATION
+#include "raygui.h"
+#include "blit.cpp"
+

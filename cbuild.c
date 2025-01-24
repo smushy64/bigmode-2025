@@ -31,7 +31,7 @@
     "-std=gnu99", "-Iraylib/src", "-Iraylib/src/external/glfw/include", "-fPIC"
 
 #define COMMON_ARGS \
-    "src/main.cpp", "-Isrc", "-Iraylib/src", "-Wall"
+    "src/main.cpp", "-Isrc", "-Iraylib/src", "-Iraygui/src", "-Wall"
 
 #define WINDOWS_ARGS \
     COMMON_ARGS, "-Lvendor/windows", "-l:libraylib.a", "-static-libgcc", "-static", "-lgdi32", "-lwinmm", \
