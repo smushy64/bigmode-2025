@@ -5,6 +5,7 @@
  * @date   January 24, 2025
 */
 #include "blit.h"
+#include "math_ex.h"
 
 Vector2 get_screen() {
     return {
@@ -55,4 +56,30 @@ Vector2 fit_to_screen( Vector2 dst, Vector2 src ) {
     }
     return result;
 }
+
+Rectangle atlas_src(
+    Vector2 atlas_resolution,
+    int atlas_x_count, int atlas_y_count,
+    int x, int y, int w, int h
+) {
+    x = x % atlas_x_count;
+    y = y % atlas_y_count;
+
+    w = Clamp( w, 1, Max( atlas_x_count - x, 1 ) );
+    h = Clamp( h, 1, Max( atlas_y_count - y, 1 ) );
+
+    Rectangle res;
+
+    Vector2 cell_size =
+        atlas_resolution / Vector2{ (float)atlas_x_count, (float)atlas_y_count };
+
+    res.x = cell_size.x * x;
+    res.y = cell_size.y * y;
+
+    res.width  = cell_size.x * w;
+    res.height = cell_size.y * h;
+
+    return res;
+}
+
 

@@ -21,4 +21,9 @@ Vector2 fit_to_screen( Vector2 dst, Vector2 src );
 
 Rectangle centered_fit_to_screen( Vector2 dst_size, Vector2 src_size );
 
+Rectangle atlas_src(
+    Vector2 atlas_resolution,
+    int atlas_x_count, int atlas_y_count,
+    int x, int y, int w = 1, int h = 1 );
+
 #endif /* header guard */

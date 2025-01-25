@@ -12,6 +12,7 @@
 #include "modes.h"
 #include "state.h"
 #include "gui.h"
+#include "shaders.h"
 
 #include <string.h>
 
@@ -19,6 +20,16 @@
 
 GlobalState* global_state;
 
+void on_resize( GlobalState* state ) {
+    Vector2 resolution = {(float)GetRenderWidth(), (float)GetRenderHeight()};
+    state->rt = LoadRenderTexture( resolution.x, resolution.y );
+    SetTextureFilter( state->rt.texture, TEXTURE_FILTER_BILINEAR );
+
+    SetShaderValue(
+        state->sh_post_process,
+        state->sh_post_process_resolution_location,
+        &resolution, SHADER_UNIFORM_VEC2 );
+}
 bool initialize() {
     global_state = (GlobalState*)malloc( sizeof(*global_state) );
     if( !global_state ) {
@@ -26,173 +37,84 @@ bool initialize() {
     }
     auto* state = global_state;
 
-    state->load_mode( START_MODE );
+    state->sh_post_process = LoadShaderFromMemory( 0, post_process_frag );
+    state->sh_post_process_resolution_location =
+        GetShaderLocation( state->sh_post_process, "resolution" );
+    on_resize( state );
+
+    state->persistent.font =
+        LoadFont( "resources/ui/fonts/RobotoCondensed/RobotoCondensed-Medium.ttf" );
+
+    SetTextureFilter(
+        state->persistent.font.texture, TEXTURE_FILTER_BILINEAR );
+
+    mode_load( state, START_MODE );
 
     GuiLoadStyle( "resources/ui/styles/dark/style_dark.rgs" );
+    GuiSetFont( state->persistent.font );
+    GuiSetStyle( DEFAULT, TEXT_SIZE, 18 );
     return true;
 }
 
 extern bool should_exit;
 void update() {
     auto* state = global_state;
-    BeginDrawing();
 
     float dt = GetFrameTime();
 
+    if( IsWindowResized() ) {
+        UnloadRenderTexture( state->rt );
+        on_resize( state );
+    }
+
     switch( state->mode ) {
         case Mode::INTRO: {
-            if( !mode_intro( state, dt ) ) {
-                should_exit = true;
-            }
+            mode_intro_update( state, dt );
         } break;
         case Mode::MAIN_MENU: {
-            if( !mode_main_menu( state, dt ) ) {
-                should_exit = true;
-            }
+            mode_main_menu_update( state, dt );
         } break;
         case Mode::GAME: {
-            if( !mode_game( state, dt ) ) {
-                should_exit = true;
-            }
+            mode_game_update( state, dt );
         } break;
     }
 
     state->timer += dt;
-
-    EndDrawing();
 }
 
-void GlobalState::load_mode( Mode mode ) {
+void mode_load( GlobalState* state, Mode mode ) {
     switch( mode ) {
         case Mode::INTRO: {
-            intro.bigmode_logo = LoadTexture( "resources/textures/logo.png" );
-            SetTextureFilter( intro.bigmode_logo, TEXTURE_FILTER_BILINEAR );
+            mode_intro_load( state );
         } break;
         case Mode::MAIN_MENU: {
-
+            mode_main_menu_load( state );
         } break;
         case Mode::GAME: {
-
+            mode_game_load( state );
         } break;
     }
 
     TraceLog( LOG_INFO, "Loaded mode %s.", to_string(mode) );
-    this->mode  = mode;
-    this->timer = 0.0;
+    state->mode  = mode;
+    state->timer = 0.0;
 }
-void GlobalState::unload_mode( Mode mode ) {
+void mode_unload( GlobalState* state, Mode mode ) {
     switch( mode ) {
         case Mode::INTRO: {
-            UnloadTexture( intro.bigmode_logo );
+            mode_intro_unload( state );
         } break;
         case Mode::MAIN_MENU: {
-
+            mode_main_menu_unload( state );
         } break;
         case Mode::GAME: {
-
+            mode_game_unload( state );
         } break;
     }
 
-    char* clear_from = (char*)(&this->mode + 1);
-    memset( clear_from, 0, sizeof(GlobalState) - (clear_from - (char*)this) );
+    memset( &state->transient, 0, sizeof(state->transient) );
 
     TraceLog( LOG_INFO, "Unloaded mode %s.", to_string(mode) );
-}
-
-bool mode_intro( GlobalState* state, float dt ) {
-    #define INTRO_LENGTH 1.25
-
-    if( state->timer >= INTRO_LENGTH ) {
-        state->set_mode( Mode::MAIN_MENU );
-        return true;
-    }
-
-    ClearBackground( { 20, 199, 195, 255 } );
-
-    Vector2 screen = get_screen();
-
-    Rectangle src, dst;
-
-    src = {};
-    rect_set_size( src, texture_size( state->intro.bigmode_logo ) );
-    src.y      = 1.0;
-    src.height = 94.0;
-
-    dst = centered_fit_to_screen( screen, rect_size(src) );
-
-    float t = state->timer / INTRO_LENGTH;
-
-    t = fmin( sin( t * M_PI ) * 2.0, 1.0 );
-
-    DrawTexturePro( state->intro.bigmode_logo, src, dst, {}, 0.0, WHITE );
-
-    Color tint = ColorLerp( BLACK, {0, 0, 0, 0}, t );
-    DrawRectangle( 0, 0, screen.x, screen.y, tint );
-
-    return true;
-}
-bool mode_main_menu( GlobalState* state, float dt ) {
-    ClearBackground( BLACK );
-
-    Vector2 screen = get_screen();
-
-    if( !(state->main_menu.is_credits_open || state->main_menu.is_options_open) ) {
-
-        Vector2 text_measure = MeasureTextEx(
-            GetFontDefault(), "BIGMODE Game Jam 2025", 24.0, 1.0 );
-        DrawTextPro(
-            GetFontDefault(), "BIGMODE Game Jam 2025",
-            {screen.x / 2.0f, (screen.y / 2.0f) - 24.0f},
-            text_measure / 2.0, 0.0, 24.0, 1.0, WHITE );
-
-        Rectangle button_rect = { screen.x / 2.0f, screen.y / 2.0f, 95.0, 35.0 };
-        button_rect.x -= button_rect.width / 2.0;
-
-        float spacing = button_rect.height + 6.0;
-
-        if( GuiButton( button_rect, "Start Game" ) ) {
-            state->set_mode( Mode::GAME );
-        }
-
-        button_rect.y += spacing;
-
-        if( GuiButton( button_rect, "Options" ) ) {
-            state->main_menu.is_options_open = !state->main_menu.is_options_open;
-        }
-
-        button_rect.y += spacing;
-
-        if( GuiButton( button_rect, "Credits" ) ) {
-            state->main_menu.is_credits_open = !state->main_menu.is_credits_open;
-        }
-
-#if !defined(PLATFORM_WEB)
-        button_rect.y += spacing;
-
-        if( GuiButton( button_rect, "Quit Game" ) ) {
-            return false;
-        }
-#endif
-
-    } else {
-        if( state->main_menu.is_options_open ) {
-            if( draw_options_menu( state->main_menu.options_state ) ) {
-                state->main_menu.is_options_open = false;
-            }
-        }
-
-        if( state->main_menu.is_credits_open ) {
-            if( draw_credits_menu() ) {
-                state->main_menu.is_credits_open = false;
-            }
-        }
-    }
-
-    return true;
-}
-bool mode_game( GlobalState* state, float dt ) {
-    ClearBackground( BLACK );
-    return true;
 }
 
 

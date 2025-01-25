@@ -14,6 +14,13 @@
 
 bool should_exit = false;
 
+void game_exit() {
+#if !defined(PLATFORM_WEB)
+    TraceLog( LOG_INFO, "Exiting game . . ." );
+    should_exit = true;
+#endif
+}
+
 int main() {
     InitWindow( WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_NAME );
 
@@ -42,4 +49,7 @@ int main() {
 #include "raygui.h"
 #include "blit.cpp"
 #include "gui.cpp"
+#include "intro.cpp"
+#include "main_menu.cpp"
+#include "game.cpp"
 

@@ -9,6 +9,7 @@
 #include <math.h>
 
 bool draw_pause_menu() {
+    return false;
 }
 
 bool draw_options_menu( GuiOptionsMenu& state ) {

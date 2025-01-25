@@ -71,6 +71,7 @@ Binary will be in `build/windows` or `build/linux` depending on the target platf
 ### External Resources
 
 - [raylib](https://www.raylib.com/)
+- [Roboto Condensed](https://fonts.google.com/specimen/Roboto+Condensed)
 
 ### Links
 

@@ -14,9 +14,17 @@ enum class Mode {
     GAME,
 };
 
-bool mode_intro( GlobalState* state, float dt );
-bool mode_main_menu( GlobalState* state, float dt );
-bool mode_game( GlobalState* state, float dt );
+void mode_intro_load( GlobalState* state );
+void mode_main_menu_load( GlobalState* state );
+void mode_game_load( GlobalState* state );
+
+void mode_intro_update( GlobalState* state, float dt );
+void mode_main_menu_update( GlobalState* state, float dt );
+void mode_game_update( GlobalState* state, float dt );
+
+void mode_intro_unload( GlobalState* state );
+void mode_main_menu_unload( GlobalState* state );
+void mode_game_unload( GlobalState* state );
 
 inline
 const char* to_string( Mode mode ) {
@@ -25,6 +33,7 @@ const char* to_string( Mode mode ) {
         case Mode::MAIN_MENU: return "Main Menu";
         case Mode::GAME:      return "Game";
     }
+    return "Unknown";
 }
 
 #endif /* header guard */

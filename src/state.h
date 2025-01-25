@@ -9,15 +9,24 @@
 #include "raylib.h"
 #include "modes.h"
 #include "gui.h"
+#include "player.h"
 
 #define WINDOW_WIDTH  1280
 #define WINDOW_HEIGHT  720
 #define WINDOW_NAME   "BIGMODE Game Jam 2025"
 
 struct GlobalState {
-    float timer;
+    Mode          mode;
+    float         timer;
+    RenderTexture rt;
 
-    Mode mode;
+    Shader sh_post_process;
+    int    sh_post_process_resolution_location;
+
+    struct {
+        Font font;
+    } persistent;
+
     union {
         struct {
             Texture bigmode_logo;
@@ -28,18 +37,21 @@ struct GlobalState {
             GuiOptionsMenu options_state;
         } main_menu;
         struct {
-
+            Camera3D camera;
+            Player   player;
         } game;
-    };
-
-    void load_mode( Mode mode );
-    void unload_mode( Mode mode );
-
-    inline
-    void set_mode( Mode mode ) {
-        unload_mode( this->mode );
-        load_mode( mode );
-    }
+    } transient;
 };
+
+void game_exit();
+
+void mode_load( GlobalState* state, Mode mode );
+void mode_unload( GlobalState* state, Mode mode );
+
+inline
+void mode_set( GlobalState* state, Mode mode ) {
+    mode_unload( state, mode );
+    mode_load( state, mode );
+}
 
 #endif /* header guard */
