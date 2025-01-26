@@ -8,207 +8,179 @@
 */
 
 static inline
+const char basic_shading_vert[] = R"(
+#version 100
+
+/* FROM RAYLIB */
+
+attribute vec3 vertexPosition;
+attribute vec2 vertexTexCoord;
+attribute vec3 vertexNormal;
+attribute vec4 vertexColor;
+
+uniform mat4 mvp;
+uniform mat4 matModel;
+
+/* FROM RAYLIB */
+
+varying vec3 v2f_position;
+varying vec2 v2f_uv;
+varying vec4 v2f_color;
+varying vec3 v2f_normal;
+
+mat3 inverse( mat3 m );
+mat3 transpose( mat3 m );
+
+void main() {
+    v2f_position = vec3( matModel * vec4( vertexPosition, 1.0 ) );
+    v2f_uv       = vertexTexCoord;
+    v2f_color    = vertexColor;
+
+    mat3 normal_mat = transpose( inverse( mat3( matModel ) ) );
+    v2f_normal      = normalize( normal_mat * vertexNormal );
+
+    gl_Position = mvp * vec4( vertexPosition, 1.0 );
+}
+
+mat3 transpose( mat3 m ) {
+    return mat3(
+        m[0][0], m[1][0], m[2][0],
+        m[0][1], m[1][1], m[2][1],
+        m[0][2], m[1][2], m[2][2] );
+}
+mat3 inverse( mat3 m ) {
+    float a00 = m[0][0], a01 = m[0][1], a02 = m[0][2];
+    float a10 = m[1][0], a11 = m[1][1], a12 = m[1][2];
+    float a20 = m[2][0], a21 = m[2][1], a22 = m[2][2];
+
+    float b01 =  a22 * a11 - a12 * a21;
+    float b11 = -a22 * a10 + a12 * a20;
+    float b21 =  a21 * a10 - a11 * a20;
+
+    float det = a00 * b01 + a01 * b11 + a02 * b21;
+
+    return mat3( b01, ( -a22 * a01 + a02 * a21 ), (  a12 * a01 - a02 * a11 ),
+                 b11, (  a22 * a00 - a02 * a20 ), ( -a12 * a00 + a02 * a10 ),
+                 b21, ( -a21 * a00 + a01 * a20 ), (  a11 * a00 - a01 * a10 ) ) / det;
+}
+
+)";
+
+static inline
+const char basic_shading_frag[] = R"(
+#version 100
+
+precision mediump float;
+
+varying vec3 v2f_position;
+varying vec2 v2f_uv;
+varying vec4 v2f_color;
+varying vec3 v2f_normal;
+
+/* FROM RAYLIB */
+
+uniform sampler2D texture0;
+
+/* FROM RAYLIB */
+
+uniform vec3 camera_position;
+
+void main() {
+    vec3 normal      = normalize( v2f_normal );
+    vec3 base_color  = texture2D( texture0, v2f_uv ).rgb;
+    vec3 from_camera = normalize( camera_position - v2f_position );
+
+    vec3 color = v2f_color.rgb * base_color;
+
+    vec3 ambient = color * vec3( 0.24, 0.24, 0.32 );
+
+    float light_mask = max( dot( from_camera, normal ), 0.0 );
+
+    gl_FragColor = vec4( (color * light_mask) + (ambient * (1.0 - light_mask)), 1.0 );
+}
+
+)";
+
+static inline
 const char post_process_frag[] = R"(
 #version 100
 
 precision mediump float;
+
+/* FROM_RAYLIB */
 
 varying vec2 fragTexCoord;
 varying vec4 fragColor;
 
 uniform sampler2D texture0;
 uniform vec4      colDiffuse;
-uniform vec2      resolution;
 
-vec3 fxaa( sampler2D src_tex, vec2 uv, vec2 resolution );
+/* FROM_RAYLIB */
 
-// out vec4 out_color;
+uniform vec2 resolution;
+
+vec3 fxaa( sampler2D tex, vec2 uv, vec2 resolution );
+
 void main() {
-    // vec2 resolution = vec2(textureSize( texture0, 0 ));
     vec3 aa_sample = fxaa( texture0, fragTexCoord, resolution ).rgb;
-    // out_color = vec4( aa_sample, 1.0 );
-    gl_FragColor = vec4( aa_sample, 1.0 );
+    gl_FragColor   = vec4( aa_sample, 1.0 );
 }
-
-float rgb_to_luma( vec3 rgb ) {
-    return sqrt( dot( rgb, vec3( 0.299, 0.587, 0.114 ) ) );
-}
-
-#define FXAA_EDGE_THRESHOLD_MIN 0.0312
-#define FXAA_EDGE_THRESHOLD_MAX 0.125
-#define FXAA_QUALITY( q ) ( (q) < 5 ? 1.0 : ( (q) > 5 ? ( (q) < 10 ? 2.0 : ( (q) < 11 ? 4.0 : 8.0 ) ) : 1.5) )
-#define FXAA_ITERATIONS (14)
 
 vec3 fetch_offset( sampler2D tex, vec2 uv, vec2 pixel_offset, vec2 resolution ) {
-    vec2 offset_uv = uv + (pixel_offset / resolution);
+    mediump vec2 offset_uv = uv + (pixel_offset / resolution);
     return texture2D( tex, offset_uv ).rgb;
 }
 
-vec3 fxaa( sampler2D src_tex, vec2 uv, vec2 resolution ) {
-    vec3 render_sample = texture2D( src_tex, uv ).rgb;
+#define FXAA_REDUCE_MIN   (1.0/ 128.0)
+#define FXAA_REDUCE_MUL   (1.0 / 8.0)
+#define FXAA_SPAN_MAX     8.0
 
-    float luma_center = rgb_to_luma( render_sample );
+vec3 fxaa( sampler2D tex, vec2 uv, vec2 resolution ) {
+    vec3 color;
 
-    float luma_down  = rgb_to_luma( fetch_offset( src_tex, uv, vec2( 0, -1), resolution ) );
-    float luma_up    = rgb_to_luma( fetch_offset( src_tex, uv, vec2( 0,  1), resolution ) );
-    float luma_left  = rgb_to_luma( fetch_offset( src_tex, uv, vec2(-1,  0), resolution ) );
-    float luma_right = rgb_to_luma( fetch_offset( src_tex, uv, vec2( 1,  0), resolution ) );
+    mediump vec3  rgb_down_left  = fetch_offset( tex, uv, vec2( -1.0, -1.0 ), resolution );
+    mediump vec3  rgb_down_right = fetch_offset( tex, uv, vec2(  1.0, -1.0 ), resolution );
+    mediump vec3  rgb_up_left    = fetch_offset( tex, uv, vec2( -1.0,  1.0 ), resolution );
+    mediump vec3  rgb_up_right   = fetch_offset( tex, uv, vec2(  1.0,  1.0 ), resolution );
+    mediump vec3  rgb_m          = texture2D( tex, uv / resolution ).rgb;
 
-    float luma_min = min( luma_center, min( min( luma_down, luma_up ), min( luma_left, luma_right ) ) );
-    float luma_max = max( luma_center, max( max( luma_down, luma_up ), max( luma_left, luma_right ) ) );
+    mediump vec3  luma = vec3( 0.299, 0.587, 0.114 );
 
-    float luma_range = luma_max - luma_min;
+    mediump float luma_down_left  = dot( rgb_down_left, luma );
+    mediump float luma_down_right = dot( rgb_down_right, luma );
+    mediump float luma_up_left    = dot( rgb_up_left, luma );
+    mediump float luma_up_right   = dot( rgb_up_right, luma );
+    mediump float luma_m          = dot( rgb_m, luma );
+    mediump float luma_min        = min( luma_m, min( min( luma_down_left, luma_down_right ), min( luma_up_left, luma_up_right ) ) );
+    mediump float luma_max        = max( luma_m, max( max( luma_down_left, luma_down_right ), max( luma_up_left, luma_up_right ) ) );
 
-    // if not on edge, don't AA
-    if( luma_range < max( FXAA_EDGE_THRESHOLD_MIN, luma_max * FXAA_EDGE_THRESHOLD_MAX ) ) {
-        return render_sample;
-    }
+    mediump vec2 dir;
+    dir.x = -((luma_down_left + luma_down_right) - (luma_up_left + luma_up_right));
+    dir.y =  ((luma_down_left + luma_up_left) - (luma_down_right + luma_up_right));
 
-    float luma_down_left =
-        rgb_to_luma( fetch_offset( src_tex, uv, vec2(-1,-1), resolution ) );
-    float luma_down_right =
-        rgb_to_luma( fetch_offset( src_tex, uv, vec2( 1,-1), resolution ) );
-    float luma_up_left =
-        rgb_to_luma( fetch_offset( src_tex, uv, vec2(-1, 1), resolution ) );
-    float luma_up_right =
-        rgb_to_luma( fetch_offset( src_tex, uv, vec2( 1, 1), resolution ) );
+    float dir_reduce = max( (luma_down_left + luma_down_right + luma_up_left + luma_up_right) * (0.25 * FXAA_REDUCE_MUL), FXAA_REDUCE_MIN );
 
-    float luma_down_up    = luma_down + luma_up;
-    float luma_left_right = luma_left + luma_right;
+    float rcp_dir_min = 1.0 / ( min( abs(dir.x), abs(dir.y) ) + dir_reduce );
 
-    float luma_left_corner  = luma_down_left  + luma_up_left;
-    float luma_down_corner  = luma_down_left  + luma_down_right;
-    float luma_right_corner = luma_down_right + luma_up_right;
-    float luma_up_corner    = luma_up_left    + luma_up_right;
+    dir = min( vec2( FXAA_SPAN_MAX ), max( vec2( -FXAA_SPAN_MAX ), dir * rcp_dir_min ) ) / resolution;
 
-    float edge_horizontal =
-        abs( -2.0 * luma_left + luma_left_corner ) +
-        abs( -2.0 * luma_center + luma_down_up )
-        * 2.0 + abs( -2.0 * luma_right * luma_right_corner );
+    vec3 rgb_a = 0.5 * (
+        texture2D( tex, uv + dir * (1.0 / 3.0 - 0.5) ).rgb +
+        texture2D( tex, uv + dir * (2.0 / 3.0 - 0.5) ).rgb );
 
-    float edge_vertical =
-        abs( -2.0 * luma_up + luma_up_corner ) +
-        abs( -2.0 * luma_center + luma_left_right )
-        * 2.0 + abs( -2.0 * luma_down + luma_down_corner );
+    vec3 rgb_b = rgb_a * 0.5 + 0.25 * (
+        texture2D( tex, uv + dir * -0.5 ).rgb +
+        texture2D( tex, uv + dir * 0.5 ).rgb );
 
-    bool is_horizontal = edge_horizontal > edge_vertical;
+    float luma_b = dot( rgb_b, luma );
 
-    float luma1 = is_horizontal ? luma_down : luma_left;
-    float luma2 = is_horizontal ? luma_up : luma_right;
-
-    float gradient1 = luma1 - luma_center;
-    float gradient2 = luma2 - luma_center;
-
-    bool is_1_steepest = abs(gradient1) >= abs(gradient2);
-
-    float gradient_scaled = 0.25 * max( abs( gradient1 ), abs( gradient2 ) );
-
-    vec2 inverse_screen_size = vec2( 1.0 / resolution.x, 1.0 / resolution.y );
-
-    float step_length = is_horizontal ? inverse_screen_size.y : inverse_screen_size.x;
-
-    float luma_local_average = 0.0;
-
-    if( is_1_steepest ) {
-        step_length        = -step_length;
-        luma_local_average = 0.5 * ( luma1 + luma_center );
+    if( ( luma_b < luma_min ) || ( luma_b > luma_max ) ) {
+        color = rgb_a;
     } else {
-        luma_local_average = 0.5 * ( luma2 + luma_center );
+        color = rgb_b;
     }
 
-    vec2 current_uv = uv;
-    if( is_horizontal ) {
-        current_uv.y += step_length * 0.5;
-    } else {
-        current_uv.x += step_length * 0.5;
-    }
-
-    vec2 offset = is_horizontal ? vec2( inverse_screen_size.x, 0.0 ) : vec2( 0.0, inverse_screen_size.y );
-
-    vec2 uv1 = current_uv - offset;
-    vec2 uv2 = current_uv + offset;
-
-    float luma_end1 = rgb_to_luma( texture2D( src_tex, uv1 ).rgb );
-    float luma_end2 = rgb_to_luma( texture2D( src_tex, uv2 ).rgb );
-    luma_end1 -= luma_local_average;
-    luma_end2 -= luma_local_average;
-
-    bool reached1 = abs( luma_end1 ) >= gradient_scaled;
-    bool reached2 = abs( luma_end2 ) >= gradient_scaled;
-    bool reached_both = reached1 && reached2;
-
-    if( !reached1 ) {
-        uv1 -= offset;
-    }
-    if( !reached2 ) {
-        uv2 += offset;
-    }
-
-    if( !reached_both ) {
-        for( int i = 2; i < FXAA_ITERATIONS; ++i ) {
-            if( !reached1 ) {
-                luma_end1 = rgb_to_luma( texture2D( src_tex, uv1 ).rgb );
-                luma_end1 = luma_end1 - luma_local_average;
-            }
-
-            if( !reached2 ) {
-                luma_end2 = rgb_to_luma( texture2D( src_tex, uv2 ).rgb );
-                luma_end2 = luma_end2 - luma_local_average;
-            }
-
-            reached1 = abs( luma_end1 ) >= gradient_scaled;
-            reached2 = abs( luma_end2 ) >= gradient_scaled;
-            reached_both = reached1 && reached2;
-
-            if( !reached1 ) {
-                uv1 -= offset * FXAA_QUALITY(i);
-            }
-            if( !reached2 ) {
-                uv2 += offset * FXAA_QUALITY(i);
-            }
-
-            if( reached_both ) {
-                break;
-            }
-        }
-    }
-
-    float distance1 = is_horizontal ? ( uv.x - uv1.x ) : ( uv.y - uv1.y );
-    float distance2 = is_horizontal ? ( uv2.x - uv.x ) : ( uv2.y - uv.y );
-
-    bool is_direction1   = distance1 < distance2;
-    float distance_final = min( distance1, distance2 );
-
-    float edge_thickness = distance1 + distance2;
-
-    bool is_luma_center_smaller = luma_center < luma_local_average;
-
-    bool correct_variation1 = ( luma_end1 < 0.0 ) != is_luma_center_smaller;
-    bool correct_variation2 = ( luma_end2 < 0.0 ) != is_luma_center_smaller;
-
-    bool correct_variation = is_direction1 ? correct_variation1 : correct_variation2;
-
-    float pixel_offset = -distance_final / edge_thickness + 0.5;
-    float final_offset = correct_variation ? pixel_offset : 0.0;
-
-    float luma_average = ( 1.0 / 12.0 ) * ( 2.0 * ( luma_down_up + luma_left_right ) + luma_left_corner + luma_right_corner );
-
-    float sub_pixel_offset_1 = clamp( abs( luma_average - luma_center ) / luma_range, 0.0, 1.0 );
-    float sub_pixel_offset_2 = ( -2.0 * sub_pixel_offset_1 + 3.0 ) * sub_pixel_offset_1 * sub_pixel_offset_1;
-
-    float sub_pixel_offset_final = sub_pixel_offset_2 * sub_pixel_offset_2 * 0.75;
-
-    final_offset = max( final_offset, sub_pixel_offset_final );
-
-    vec2 final_uv = uv;
-    if( is_horizontal ) {
-        final_uv.y += final_offset * step_length;
-    } else {
-        final_uv.x += final_offset * step_length;
-    }
-
-    vec3 final_color = texture2D( src_tex, final_uv ).rgb;
-    return final_color;
+    return color;
 }
 
 )";

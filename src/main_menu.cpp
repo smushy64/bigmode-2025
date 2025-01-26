@@ -64,7 +64,7 @@ void mode_main_menu_update( GlobalState* state, float dt ) {
 
     } else {
         if( state->transient.main_menu.is_options_open ) {
-            if( draw_options_menu( state->transient.main_menu.options_state ) ) {
+            if( draw_options_menu() ) {
                 state->transient.main_menu.is_options_open = false;
             }
         }

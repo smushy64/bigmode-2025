@@ -104,6 +104,7 @@ struct Args {
             enum Target target    : 4;
             bool is_strip_symbols : 1;
             bool is_optimized     : 1;
+            bool is_release       : 1;
         } build;
         struct Run {
             struct Build build;
@@ -324,8 +325,9 @@ int mode_package( struct Args* args ) {
     memory_zero( &args->build, sizeof(args->build) );
     int result  = 0;
 
+    args->build.is_release = args->build.is_optimized = args->build.is_strip_symbols = true;
+
 #if defined(PLATFORM_LINUX)
-    args->build.is_optimized = args->build.is_strip_symbols = true;
 
     args->build.target = T_GNU_LINUX;
     result             = mode_build( args );
@@ -381,7 +383,7 @@ int mode_package( struct Args* args ) {
 
     chdir( "../windows" );
 
-    result = quick_cmd( "zip", "bigmode-2025-win32-x86-64.zip", WINDOWS_EXE );
+    result = quick_cmd( "zip", "bigmode-2025-windows-x86-64.zip", WINDOWS_EXE );
     chdir( "../.." );
     if( result ) {
         cb_error( "Failed to zip windows version!" );
@@ -391,7 +393,7 @@ int mode_package( struct Args* args ) {
 #else
     chdir( "build/windows" );
 
-    result = quick_cmd( "zip", "bigmode-2025-win32-x86-64.zip", WINDOWS_EXE );
+    result = quick_cmd( "zip", "bigmode-2025-windows-x86-64.zip", WINDOWS_EXE );
     chdir( "../.." );
     if( result ) {
         cb_error( "Failed to zip windows version!" );
@@ -417,6 +419,9 @@ int build_linux( const char* cpp, struct Build* build ) {
     command_builder_new( cpp, &builder );
     command_builder_append( &builder, GNU_LINUX_ARGS );
 
+    if( build->is_release ) {
+        command_builder_push( &builder, "-DRELEASE" );
+    }
     if( build->is_optimized ) {
         command_builder_push( &builder, "-O2" );
     }
@@ -439,6 +444,9 @@ int build_windows( const char* cpp, struct Build* build ) {
     command_builder_new( cpp, &builder );
     command_builder_append( &builder, WINDOWS_ARGS );
 
+    if( build->is_release ) {
+        command_builder_push( &builder, "-DRELEASE" );
+    }
     if( build->is_optimized ) {
         command_builder_push( &builder, "-O2" );
     }
@@ -461,6 +469,9 @@ int build_web( const char* cpp, struct Build* build ) {
     command_builder_new( cpp, &builder );
     command_builder_append( &builder, WEB_ARGS );
 
+    if( build->is_release ) {
+        command_builder_push( &builder, "-DRELEASE" );
+    }
     if( !build->is_strip_symbols ) {
         command_builder_push( &builder, "--profiling" );
     }

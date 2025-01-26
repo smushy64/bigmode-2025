@@ -10,6 +10,19 @@
 
 #if defined(PLATFORM_WEB)
     #include <emscripten/emscripten.h>
+#else
+    #if defined(_WIN32)
+        #define _dllexport_ __declspec(dllexport)
+    #else
+        #define _dllexport_
+    #endif
+    
+    extern "C" {
+        _dllexport_
+        unsigned long NvOptimusEnablement = 1;
+        _dllexport_
+        int AmdPowerXpressRequestHighPerformance = 1;
+    }
 #endif
 
 bool should_exit = false;
@@ -22,6 +35,9 @@ void game_exit() {
 }
 
 int main() {
+#if defined(PLATFORM_WEB)
+    SetConfigFlags( FLAG_VSYNC_HINT );
+#endif
     InitWindow( WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_NAME );
 
     if( !initialize() ) {
@@ -45,11 +61,13 @@ int main() {
     return 0;
 }
 
-#define RAYGUI_IMPLEMENTATION
-#include "raygui.h"
 #include "blit.cpp"
 #include "gui.cpp"
 #include "intro.cpp"
 #include "main_menu.cpp"
 #include "game.cpp"
+#include "globals.cpp"
+
+#define RAYGUI_IMPLEMENTATION
+#include "raygui.h"
 

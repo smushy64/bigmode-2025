@@ -6,27 +6,145 @@
 */
 #include "gui.h"
 #include "blit.h"
+#include "globals.h"
 #include <math.h>
 
-bool draw_pause_menu() {
-    return false;
-}
+extern void game_exit();
 
-bool draw_options_menu( GuiOptionsMenu& state ) {
+bool draw_pause_menu( GuiPauseMenu& state ) {
     Vector2 screen = get_screen();
 
-    Rectangle options_rect;
-    options_rect.width  = screen.x - 800.0;
-    options_rect.height = screen.y - 100.0;
-
-    options_rect.width  = fmax( options_rect.width, 400.0 );
-    options_rect.height = fmax( options_rect.height, 500.0 );
-
-    options_rect.x = (screen.x / 2.0) - (options_rect.width / 2.0);
-    options_rect.y = (screen.y / 2.0) - (options_rect.height / 2.0);
-    if( GuiWindowBox( options_rect, "Options" ) ) {
+    if( state.is_options_open ) {
+        if( draw_options_menu() ) {
+            state.is_options_open = false;
+        }
         return true;
     }
+
+    Rectangle r_menu;
+    r_menu.width  = screen.x - (screen.x / 1.3);
+    r_menu.height = screen.y - (screen.y / 1.4);
+    
+    r_menu.x = (screen.x / 2.0) - (r_menu.width  / 2.0);
+    r_menu.y = (screen.y / 2.0) - (r_menu.height / 2.0);
+
+    if( GuiWindowBox( r_menu, "Paused" ) ) {
+        return false;
+    }
+
+    const static float gutter = 10.0;
+    r_menu.x      += gutter;
+    r_menu.width  -= gutter * 2.0;
+    r_menu.y      += 35.0;
+    r_menu.height -= 35.0;
+
+    const static float button_spacing = 10.0;
+    const static float button_height  = 30.0;
+    Rectangle r_button = r_menu;
+    r_button.height = button_height;
+
+    if( GuiButton( r_button, "Resume" ) ) {
+        return false;
+    }
+    r_button.y += button_spacing + button_height;
+    if( GuiButton( r_button, "Options" ) ) {
+        state.is_options_open = true;
+        return true;
+    }
+    r_button.y += button_spacing + button_height;
+    if( GuiButton( r_button, "Quit to Menu" ) ) {
+        state.quit_to_menu = true;
+    }
+    r_button.y += button_spacing + button_height;
+#if !defined(PLATFORM_WEB)
+    if( GuiButton( r_button, "Quit to Desktop" ) ) {
+        game_exit();
+    }
+#endif
+
+    return true;
+}
+
+bool draw_options_menu() {
+    Vector2 screen = get_screen();
+
+    Rectangle r_menu;
+    r_menu.width  = screen.x - (screen.x / 1.3);
+    r_menu.height = screen.y - (screen.y / 2.8);
+    
+    r_menu.x = (screen.x / 2.0) - (r_menu.width  / 2.0);
+    r_menu.y = (screen.y / 2.0) - (r_menu.height / 2.0);
+
+    if( GuiWindowBox( r_menu, "Options" ) ) {
+        return true;
+    }
+
+    const static float gutter = 10.0;
+    r_menu.x      += gutter;
+    r_menu.width  -= gutter * 2.0;
+    r_menu.y      += 35.0;
+    r_menu.height -= 35.0;
+
+    const static float button_spacing = 10.0;
+    const static float button_height  = 30.0;
+    Rectangle r_button = r_menu;
+    r_button.height = button_height;
+
+    Rectangle r_slider = r_button;
+    float slider_move  = MeasureTextEx( GameFont(), "Volume Music", 20.0, 1.0 ).x;
+    r_slider.x     += slider_move;
+    r_slider.width -= slider_move;
+
+    if( GuiButton( r_button, "Return" ) ) {
+        return true;
+    }
+    r_slider.y = r_button.y += button_spacing + button_height;
+
+    if( GuiButton( r_button, TextFormat( "FXAA: %s", OptionFXAA() ? "ON" : "OFF" )) ) {
+        OptionFXAA( !OptionFXAA() );
+    }
+    r_slider.y = r_button.y += button_spacing + button_height;
+
+    Vector2 sensitivity = OptionCameraSensitivity();
+    if( GuiSlider( r_slider, "Sensitivity X ", "", &sensitivity.x, 0.0, 4.0 )) {
+        OptionCameraSensitivity( sensitivity );
+    }
+    r_button.y = r_slider.y += button_spacing + button_height;
+
+    sensitivity = OptionCameraSensitivity();
+    if( GuiSlider( r_slider, "Sensitivity Y ", "", &sensitivity.y, 0.0, 4.0 )) {
+        OptionCameraSensitivity( sensitivity );
+    }
+    r_button.y = r_slider.y += button_spacing + button_height;
+
+
+    if( GuiButton( r_button, TextFormat( "Camera Invert X: %s", OptionInverseX() ? "ON" : "OFF" )) ) {
+        OptionInverseX( !OptionInverseX() );
+    }
+    r_slider.y = r_button.y += button_spacing + button_height;
+
+    if( GuiButton( r_button, TextFormat( "Camera Invert Y: %s", OptionInverseY() ? "ON" : "OFF" )) ) {
+        OptionInverseY( !OptionInverseY() );
+    }
+    r_slider.y = r_button.y += button_spacing + button_height;
+
+    float value = OptionVolume();
+    if( GuiSlider( r_slider, "Volume      ", "", &value, 0.0, 1.0 )) {
+        OptionVolume( value );
+    }
+    r_button.y = r_slider.y += button_spacing + button_height;
+
+    value = OptionVolumeSFX();
+    if( GuiSlider( r_slider, "Volume SFX  ", "", &value, 0.0, 1.0 )) {
+        OptionVolumeSFX( value );
+    }
+    r_button.y = r_slider.y += button_spacing + button_height;
+
+    value = OptionVolumeMusic();
+    if( GuiSlider( r_slider, "Volume Music", "", &value, 0.0, 1.0 )) {
+        OptionVolumeMusic( value );
+    }
+    r_button.y = r_slider.y += button_spacing + button_height;
 
     return false;
 }

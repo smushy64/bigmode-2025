@@ -13,10 +13,11 @@
 #include "state.h"
 #include "gui.h"
 #include "shaders.h"
+#include "globals.h"
 
 #include <string.h>
 
-#define START_MODE Mode::INTRO
+#define DEBUG_START_MODE Mode::GAME
 
 GlobalState* global_state;
 
@@ -27,7 +28,7 @@ void on_resize( GlobalState* state ) {
 
     SetShaderValue(
         state->sh_post_process,
-        state->sh_post_process_resolution_location,
+        state->sh_post_process_loc_resolution,
         &resolution, SHADER_UNIFORM_VEC2 );
 }
 bool initialize() {
@@ -35,20 +36,31 @@ bool initialize() {
     if( !global_state ) {
         return false;
     }
+    memset( global_state, 0, sizeof(*global_state) );
     auto* state = global_state;
 
+    state->sh_basic_shading = LoadShaderFromMemory( basic_shading_vert, basic_shading_frag );
+    state->sh_basic_shading_loc_camera_position =
+        GetShaderLocation( state->sh_basic_shading, "camera_position" );
+
     state->sh_post_process = LoadShaderFromMemory( 0, post_process_frag );
-    state->sh_post_process_resolution_location =
+    state->sh_post_process_loc_resolution =
         GetShaderLocation( state->sh_post_process, "resolution" );
     on_resize( state );
 
     state->persistent.font =
         LoadFont( "resources/ui/fonts/RobotoCondensed/RobotoCondensed-Medium.ttf" );
 
+    GameFont( state->persistent.font );
+
     SetTextureFilter(
         state->persistent.font.texture, TEXTURE_FILTER_BILINEAR );
 
-    mode_load( state, START_MODE );
+#if defined(RELEASE)
+    mode_load( state, Mode::INTRO );
+#else
+    mode_load( state, DEBUG_START_MODE );
+#endif
 
     GuiLoadStyle( "resources/ui/styles/dark/style_dark.rgs" );
     GuiSetFont( state->persistent.font );

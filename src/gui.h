@@ -9,12 +9,15 @@
 #include "raylib.h"
 #include "raygui.h"
 
-struct GuiOptionsMenu {
+
+struct GuiPauseMenu {
+    bool is_options_open;
+    bool quit_to_menu;
 };
 
-bool draw_options_menu( GuiOptionsMenu& state );
+bool draw_pause_menu( GuiPauseMenu& state );
+bool draw_options_menu();
 bool draw_credits_menu();
 
-bool draw_pause_menu();
 
 #endif /* header guard */

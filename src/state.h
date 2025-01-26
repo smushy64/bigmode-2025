@@ -21,7 +21,10 @@ struct GlobalState {
     RenderTexture rt;
 
     Shader sh_post_process;
-    int    sh_post_process_resolution_location;
+    int    sh_post_process_loc_resolution;
+
+    Shader sh_basic_shading;
+    int    sh_basic_shading_loc_camera_position;
 
     struct {
         Font font;
@@ -34,11 +37,12 @@ struct GlobalState {
         struct {
             bool is_options_open;
             bool is_credits_open;
-            GuiOptionsMenu options_state;
         } main_menu;
         struct {
-            Camera3D camera;
-            Player   player;
+            bool         is_paused;
+            GuiPauseMenu pause_menu_state;
+            Camera3D     camera;
+            Player       player;
         } game;
     } transient;
 };
