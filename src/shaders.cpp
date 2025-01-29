@@ -1,13 +1,10 @@
-#if !defined(SHADERS_H)
-#define SHADERS_H
 /**
- * @file   shaders.h
- * @brief  Shaders.
+ * @file   shaders.cpp
+ * @brief  Shader sources.
  * @author Alicia Amarilla (smushyaa@gmail.com)
- * @date   January 24, 2025
+ * @date   January 25, 2025
 */
 
-static inline
 const char basic_shading_vert[] = R"(
 #version 100
 
@@ -20,6 +17,8 @@ attribute vec4 vertexColor;
 
 uniform mat4 mvp;
 uniform mat4 matModel;
+
+uniform vec4 colDiffuse;
 
 /* FROM RAYLIB */
 
@@ -34,7 +33,7 @@ mat3 transpose( mat3 m );
 void main() {
     v2f_position = vec3( matModel * vec4( vertexPosition, 1.0 ) );
     v2f_uv       = vertexTexCoord;
-    v2f_color    = vertexColor;
+    v2f_color    = vertexColor * colDiffuse;
 
     mat3 normal_mat = transpose( inverse( mat3( matModel ) ) );
     v2f_normal      = normalize( normal_mat * vertexNormal );
@@ -66,7 +65,6 @@ mat3 inverse( mat3 m ) {
 
 )";
 
-static inline
 const char basic_shading_frag[] = R"(
 #version 100
 
@@ -85,6 +83,14 @@ uniform sampler2D texture0;
 
 uniform vec3 camera_position;
 
+float invmix( float a, float b, float v ) {
+    return ( v - a ) / ( b - a );
+}
+float remap( float imin, float imax, float omin, float omax, float v ) {
+    float t = invmix( imin, imax, v );
+    return mix( omin, omax, t );
+}
+
 void main() {
     vec3 normal      = normalize( v2f_normal );
     vec3 base_color  = texture2D( texture0, v2f_uv ).rgb;
@@ -95,13 +101,13 @@ void main() {
     vec3 ambient = color * vec3( 0.24, 0.24, 0.32 );
 
     float light_mask = max( dot( from_camera, normal ), 0.0 );
+    light_mask = remap( 0.0, 1.0, 0.1, 1.0, light_mask );
 
     gl_FragColor = vec4( (color * light_mask) + (ambient * (1.0 - light_mask)), 1.0 );
 }
 
 )";
 
-static inline
 const char post_process_frag[] = R"(
 #version 100
 
@@ -185,4 +191,4 @@ vec3 fxaa( sampler2D tex, vec2 uv, vec2 resolution ) {
 
 )";
 
-#endif /* header guard */
+

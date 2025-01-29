@@ -35,10 +35,11 @@ void game_exit() {
 }
 
 int main() {
-#if defined(PLATFORM_WEB)
+#if !defined(PLATFORM_WEB)
     SetConfigFlags( FLAG_VSYNC_HINT );
 #endif
     InitWindow( WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_NAME );
+    InitAudioDevice();
 
     if( !initialize() ) {
         return 1;
@@ -48,7 +49,6 @@ int main() {
     emscripten_set_main_loop( update, 0, 1 );
 #else
     SetExitKey( KEY_ZERO );
-    SetTargetFPS( 60 );
     while( !WindowShouldClose() ) {
         update();
         if( should_exit ) {
@@ -57,6 +57,7 @@ int main() {
     }
 #endif
 
+    CloseAudioDevice();
     CloseWindow();
     return 0;
 }
@@ -66,8 +67,20 @@ int main() {
 #include "intro.cpp"
 #include "main_menu.cpp"
 #include "game.cpp"
+#include "audio.cpp"
 #include "globals.cpp"
+#include "shaders.cpp"
+
+// Thank you GCC
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+#pragma GCC diagnostic ignored "-Wenum-compare"
+#pragma GCC diagnostic ignored "-Wunused-result"
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 
 #define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
+
+#pragma GCC diagnostic pop
+
 

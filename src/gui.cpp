@@ -69,7 +69,7 @@ bool draw_options_menu() {
     Vector2 screen = get_screen();
 
     Rectangle r_menu;
-    r_menu.width  = screen.x - (screen.x / 1.3);
+    r_menu.width  = screen.x - (screen.x / 1.4);
     r_menu.height = screen.y - (screen.y / 2.8);
     
     r_menu.x = (screen.x / 2.0) - (r_menu.width  / 2.0);
@@ -91,7 +91,7 @@ bool draw_options_menu() {
     r_button.height = button_height;
 
     Rectangle r_slider = r_button;
-    float slider_move  = MeasureTextEx( GameFont(), "Volume Music", 20.0, 1.0 ).x;
+    float slider_move  = MeasureTextEx( GameFont(), "XXXXXXXXXXXX", 20.0, 1.0 ).x;
     r_slider.x     += slider_move;
     r_slider.width -= slider_move;
 
@@ -106,13 +106,19 @@ bool draw_options_menu() {
     r_slider.y = r_button.y += button_spacing + button_height;
 
     Vector2 sensitivity = OptionCameraSensitivity();
-    if( GuiSlider( r_slider, "Sensitivity X ", "", &sensitivity.x, 0.0, 4.0 )) {
+    if( GuiSlider(
+        r_slider, TextFormat( "Sensitivity X %.2f ", sensitivity.x ),
+        "", &sensitivity.x, 0.0, 4.0
+    ) ) {
         OptionCameraSensitivity( sensitivity );
     }
     r_button.y = r_slider.y += button_spacing + button_height;
 
     sensitivity = OptionCameraSensitivity();
-    if( GuiSlider( r_slider, "Sensitivity Y ", "", &sensitivity.y, 0.0, 4.0 )) {
+    if( GuiSlider(
+        r_slider, TextFormat( "Sensitivity Y %.2f ", sensitivity.y ),
+        "", &sensitivity.y, 0.0, 4.0 
+    ) ) {
         OptionCameraSensitivity( sensitivity );
     }
     r_button.y = r_slider.y += button_spacing + button_height;
@@ -129,19 +135,19 @@ bool draw_options_menu() {
     r_slider.y = r_button.y += button_spacing + button_height;
 
     float value = OptionVolume();
-    if( GuiSlider( r_slider, "Volume      ", "", &value, 0.0, 1.0 )) {
+    if( GuiSlider( r_slider, TextFormat( "Volume %.2f ", value ), "", &value, 0.0, 1.0 )) {
         OptionVolume( value );
     }
     r_button.y = r_slider.y += button_spacing + button_height;
 
     value = OptionVolumeSFX();
-    if( GuiSlider( r_slider, "Volume SFX  ", "", &value, 0.0, 1.0 )) {
+    if( GuiSlider( r_slider, TextFormat( "Volume SFX %.2f ", value ), "", &value, 0.0, 1.0 )) {
         OptionVolumeSFX( value );
     }
     r_button.y = r_slider.y += button_spacing + button_height;
 
     value = OptionVolumeMusic();
-    if( GuiSlider( r_slider, "Volume Music", "", &value, 0.0, 1.0 )) {
+    if( GuiSlider( r_slider, TextFormat( "Volume Music %.2f ", value ), "", &value, 0.0, 1.0 )) {
         OptionVolumeMusic( value );
     }
     r_button.y = r_slider.y += button_spacing + button_height;
@@ -152,11 +158,8 @@ bool draw_credits_menu() {
     Vector2 screen = get_screen();
 
     Rectangle credits_rect;
-    credits_rect.width  = screen.x - 800.0;
-    credits_rect.height = screen.y - 100.0;
-
-    credits_rect.width  = fmax( credits_rect.width, 400.0 );
-    credits_rect.height = fmax( credits_rect.height, 500.0 );
+    credits_rect.width  = screen.x - (screen.x / 1.4);
+    credits_rect.height = screen.y - (screen.y / 1.3);
 
     credits_rect.x = (screen.x / 2.0) - (credits_rect.width / 2.0);
     credits_rect.y = (screen.y / 2.0) - (credits_rect.height / 2.0);

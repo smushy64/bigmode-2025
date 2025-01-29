@@ -14,18 +14,19 @@ readonly() float MAX_WALK_VELOCITY = 15.0;
 readonly() float MAX_RUN_VELOCITY  = 25.0;
 
 readonly() float STOP_DRAG         = 10.0;
-readonly() float TURN_SPEED        = 12.0;
-readonly() float CAMERA_DISTANCE   = 6.0;
+readonly() float TURN_SPEED        = 16.0;
+readonly() float CAMERA_DISTANCE   = 5.5;
 readonly() float CAMERA_HEIGHT     = 2.0;
 readonly() Vector3 CAMERA_TARGET_OFFSET = { 0.0, 1.25, 0.0 };
 
 readonly() float START_MAX_POWER         = 200.0;
 readonly() float POWER_LOSS_RATE         = 1.2;
+readonly() float POWER_LOSS_IDLE_MULT    = 0.2;
 readonly() float POWER_LOSS_RUNNING_MULT = 2.0;
 
-readonly() float PUNCH_POWER_LOSS = 12.0;
-readonly() float KICK_POWER_LOSS  = 18.0;
-readonly() float DODGE_POWER_LOSS = 20.0;
+readonly() float POWER_LOSS_PUNCH = 12.0;
+readonly() float POWER_LOSS_KICK  = 18.0;
+readonly() float POWER_LOSS_DODGE = 30.0;
 
 readonly() float DODGE_TIME  = 0.24;
 readonly() float DODGE_SPEED = 30.0;
@@ -77,6 +78,10 @@ struct Player {
     float inv_time;
 
     float dodge_cooldown_timer;
+    float sfx_walk_timer;
+    float sfx_walk_time;
 };
+
+#undef readonly
 
 #endif /* header guard */

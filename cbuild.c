@@ -40,7 +40,7 @@
     "-std=gnu99", "-Iraylib/src", "-Iraylib/src/external/glfw/include", "-fPIC"
 
 #define COMMON_ARGS \
-    "src/main.cpp", "-Isrc", "-Iraylib/src", "-Iraygui/src", "-Wall"
+    "src/main.cpp", "-Iinclude", "-Iraylib/src", "-Iraygui/src", "-Wall"
 
 #define WINDOWS_ARGS \
     COMMON_ARGS, "-Lvendor/windows", "-l:libraylib.a", "-static-libgcc", "-static", "-lgdi32", "-lwinmm", \
@@ -87,6 +87,7 @@ enum Mode {
     M_BUILD,
     M_RUN,
     M_PACKAGE,
+    M_EDITOR,
 
     M_COUNT
 };
@@ -119,6 +120,7 @@ int mode_help( struct Args* args );
 int mode_build( struct Args* args );
 int mode_run( struct Args* args );
 int mode_package( struct Args* args );
+int mode_editor( struct Args* args );
 
 bool __make_dirs( const char* first, ... );
 #define make_dirs( ... ) __make_dirs( __VA_ARGS__, NULL )
@@ -199,6 +201,7 @@ int main( int argc, const char** argv ) {
         case M_BUILD:   return mode_build( &args );
         case M_RUN:     return mode_run( &args );
         case M_PACKAGE: return mode_package( &args );
+        case M_EDITOR:  return mode_editor( &args );
         case M_COUNT:   return 1;
     }
 
@@ -410,6 +413,97 @@ int mode_package( struct Args* args ) {
     }
 
     return 0;
+}
+int mode_editor( struct Args* args ) {
+    struct Build* build = &args->build;
+    build->target = target_native();
+
+    String cc  = target_compiler( build->target );
+    String cpp = target_cpp_compiler( build->target );
+    String ar  = target_ar( build->target );
+
+    if( !process_in_path( cc.cc ) ) {
+        cb_error( "%s is required!", cc.cc );
+        return 1;
+    }
+    if( !process_in_path( cpp.cc ) ) {
+        cb_error( "%s is required!", cpp.cc );
+        return 1;
+    }
+    if( !process_in_path( ar.cc ) ) {
+        cb_error( "%s is required!", ar.cc );
+        return 1;
+    }
+
+    cb_info( "Building for target %s . . .", target_to_string( build->target ).cc );
+    cb_info( "C   compiler: %s", cc.cc );
+    cb_info( "C++ compiler: %s", cpp.cc );
+    cb_info( "AR:           %s", ar.cc );
+
+    make_dirs( "vendor", local_fmt( "vendor/%s", target_to_string(build->target).cc ) );
+
+    if( !path_exists(
+        local_fmt("vendor/%s/libraylib.a", target_to_string(build->target).cc)
+    ) ) {
+        int result = build_dependency_raylib(
+            build->target, cc.cc, ar.cc );
+        if( result ) {
+            return result;
+        }
+    }
+
+    CommandBuilder builder;
+    command_builder_new( cpp.cc, &builder );
+
+    command_builder_append(
+        &builder, "editor/main.cpp", "-Iinclude",
+        "-Iraylib/src", "-Iraygui/src", "-Wall",
+        "-O0" );
+    switch( build->target ) {
+        case T_GNU_LINUX: {
+            make_dirs( "build", "build/linux" );
+            command_builder_append( &builder,
+                "-ggdb", "-Lvendor/linux", "-l:libraylib.a",
+                "-lGL", "-lm", "-lpthread", "-ldl", "-lrt", "-lX11", "-static-libgcc",
+                "-o", "build/linux/bigmode-2025-editor" );
+        } break;
+        case T_WINDOWS: {
+            make_dirs( "build", "build/windows" );
+            command_builder_append( &builder,
+                "-g", "-Lvendor/windows", "-l:libraylib.a", "-static-libgcc",
+                "-static", "-lgdi32", "-lwinmm",
+                "-lopengl32", "-lshell32", "-o", "build/windows/bigmode-2025-editor.exe" );
+        } break;
+
+        case T_NATIVE:
+        case T_WEB:
+        case T_COUNT: unreachable();
+    }
+
+    PID pid = process_exec( command_builder_cmd( &builder ), false, 0, 0, 0, 0 );
+    command_builder_free( &builder );
+
+    int result = process_wait( pid );
+    if( result ) {
+        return result;
+    }
+
+    Command cmd;
+
+    switch( build->target ) {
+        case T_GNU_LINUX: {
+            cmd = command_new( "./build/linux/bigmode-2025-editor" );
+        } break;
+        case T_WINDOWS: {
+            cmd = command_new( "./build/windows/bigmode-2025-editor.exe" );
+        } break;
+
+        case T_NATIVE:
+        case T_WEB:
+        case T_COUNT: break;
+    }
+
+    return __quick_cmd( cmd );
 }
 
 int build_linux( const char* cpp, struct Build* build ) {
@@ -630,7 +724,7 @@ int mode_help( struct Args* args ) {
         mode = args->mode;
     }
 
-    printf( "OVERVIEW:    Compile BIGMODE 2025 game jam submission.\n" );
+    printf( "OVERVIEW:    Compile BIGMODE 2025 Game Jam project.\n" );
     printf( "USAGE:       ./cbuild %s [args]\n",
         mode == M_HELP ? "<mode>" : mode_to_string(mode).cc );
     printf( "DESCRIPTION:\n");
@@ -666,10 +760,9 @@ int mode_help( struct Args* args ) {
             printf( "  -optimized        Optimize with -O2 rather than -O0\n" );
             printf( "  -strip-symbols    Strip debug symbols.\n" );
         } break;
-        case M_PACKAGE: {
-        } break;
-        case M_COUNT:
-            break;
+        case M_PACKAGE:
+        case M_EDITOR:
+        case M_COUNT:   break;
     }
     return 0;
 }
@@ -680,6 +773,7 @@ String mode_description( enum Mode mode ) {
         case M_BUILD:   return string_text("Compile project.");
         case M_RUN:     return string_text("Compile and run (native only).");
         case M_PACKAGE: return string_text("Compile in Release mode and package for each platform (Windows,Linux and Web)");
+        case M_EDITOR:  return string_text("Compile and run editor (native only).");
         case M_COUNT: unreachable();
     }
 }
@@ -689,6 +783,7 @@ String mode_to_string( enum Mode mode ) {
         case M_BUILD:   return string_text("build");
         case M_RUN:     return string_text("run");
         case M_PACKAGE: return string_text("package");
+        case M_EDITOR:  return string_text("editor");
         case M_COUNT: unreachable();
     }
 }

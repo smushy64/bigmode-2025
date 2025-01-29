@@ -10,10 +10,17 @@
 #include "modes.h"
 #include "gui.h"
 #include "player.h"
+#include "shared/object.h"
 
 #define WINDOW_WIDTH  1280
 #define WINDOW_HEIGHT  720
 #define WINDOW_NAME   "BIGMODE Game Jam 2025"
+
+struct SoundBuffer {
+    Sound* buf;
+    int    len;
+    int    cap;
+};
 
 struct GlobalState {
     Mode          mode;
@@ -43,6 +50,21 @@ struct GlobalState {
             GuiPauseMenu pause_menu_state;
             Camera3D     camera;
             Player       player;
+
+            Model player_model;
+
+            struct {
+                Texture white;
+            } textures;
+            struct {
+                SoundBuffer step;
+                SoundBuffer dash;
+            } sounds;
+            struct {
+                Object* buf;
+                int     len;
+                int     cap;
+            } objects;
         } game;
     } transient;
 };
