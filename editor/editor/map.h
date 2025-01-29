@@ -6,9 +6,11 @@
  * @author Alicia Amarilla (smushyaa@gmail.com)
  * @date   January 27, 2025
 */
+// IWYU pragma: begin_keep
 #include "shared/world.h"
 #include "shared/buffer.h"
 #include "raymath.h"
+// IWYU pragma: end_keep
 
 struct EdObject;
 struct EdSegment;
@@ -112,6 +114,27 @@ ObjectShapeDescription object_shape( ObjectType type ) {
         case ObjectType::PLAYER_SPAWN: return {
             .tint   = BLUE,
             .shape  = ObjectShape::CIRCLE,
+            .circle = {
+                .radius = 0.5
+            }
+        };
+        case ObjectType::ENEMY: return {
+            .tint  = RED,
+            .shape = ObjectShape::CIRCLE,
+            .circle = {
+                .radius = 0.5
+            }
+        };
+        case ObjectType::BATTERY: return {
+            .tint  = SKYBLUE,
+            .shape = ObjectShape::CIRCLE,
+            .circle = {
+                .radius = 0.5
+            }
+        };
+        case ObjectType::LEVEL_EXIT: return {
+            .tint  = GOLD,
+            .shape = ObjectShape::CIRCLE,
             .circle = {
                 .radius = 0.5
             }

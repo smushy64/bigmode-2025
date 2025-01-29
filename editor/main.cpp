@@ -4,6 +4,7 @@
  * @author Alicia Amarilla (smushyaa@gmail.com)
  * @date   January 26, 2025
 */
+// IWYU pragma: begin_keep
 #include "raylib.h"
 #include "raygui.h"
 #include "raymath.h"
@@ -13,10 +14,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+// IWYU pragma: end_keep
 
 inline
 void _0_( int v, ... );
 #define unused(...) _0_( 0, ##__VA_ARGS__ )
+
+Vector3 v3( float x, float y, float z ) { return Vector3{ x, y, z }; }
+Vector3 v3( float x ) { return v3( x, x, x ); }
 
 #define DEFAULT_WINDOW_WIDTH  (1280)
 #define DEFAULT_WINDOW_HEIGHT ( 720)
@@ -32,6 +37,8 @@ void DrawRectangleLinesRec( Rectangle rect, Color color );
 
 enum class Mode {
     SELECT,
+    PUT,
+    BUILD,
 
     COUNT
 };
@@ -94,12 +101,37 @@ struct HoverResult {
     }
 };
 
+struct VertexBuffer {
+    Vector3* buf;
+    int      len;
+    int      cap;
+};
+struct IndexBuffer {
+    unsigned short* buf;
+    int len;
+    int cap;
+};
+
 struct State {
     MapStorage  storage;
-    Selection   selection;
     HoverResult hover;
     Mode        mode;
 
+    VertexBuffer triangle_positions;
+    IndexBuffer  triangle_indexes;
+    bool triangles_dirty;
+
+    union {
+        Selection selection;
+
+        struct {
+            ObjectType type;
+        } put;
+
+        struct {
+            int previous_index;
+        } build;
+    };
     struct {
         // tag: selection.type
         union {
@@ -146,6 +178,7 @@ struct State {
         bool is_dirty;
     } inspector;
 };
+bool triangulate( State& state );
 void hover_items( State& state, Vector2 mouse_world_position );
 void set_mode( State& state, Mode mode );
 int main() {
@@ -168,35 +201,8 @@ int main() {
     RenderTexture rt = LoadRenderTexture( draw_area.x, draw_area.y );
 
     State* _ptr_state = (State*)calloc( 1, sizeof(State) );
-    State& state = *_ptr_state; {
-        EdVertex vertexes[] = {
-            { Vector2{ 0, 0 } },
-            { Vector2{ 0, 5 } },
-            { Vector2{ 5, 5 } },
-            { Vector2{ 5, 0 } },
-        };
-        buf_append( &state.storage.vertexes, vertexes[0] );
-        buf_append( &state.storage.vertexes, vertexes[1] );
-        buf_append( &state.storage.vertexes, vertexes[2] );
-        buf_append( &state.storage.vertexes, vertexes[3] );
-
-        EdSegment segments[] = {
-            { 0, 1, WHITE, 0, { .is_flipped_normal = false, .is_solid = true } },
-            { 1, 2, WHITE, 0, { .is_flipped_normal = false, .is_solid = true } },
-            { 2, 3, WHITE, 0, { .is_flipped_normal = false, .is_solid = true } },
-            { 3, 0, WHITE, 0, { .is_flipped_normal = false, .is_solid = true } },
-        };
-        buf_append( &state.storage.segments, segments[0] );
-        buf_append( &state.storage.segments, segments[1] );
-        buf_append( &state.storage.segments, segments[2] );
-        buf_append( &state.storage.segments, segments[3] );
-
-        EdObject obj = {
-            .position = {2.5, 2.5},
-            .type     = ObjectType::PLAYER_SPAWN
-        };
-        buf_append( &state.storage.objects, obj );
-    }
+    State& state = *_ptr_state; 
+    state.triangles_dirty = true;
 
     const char* modes = collate_modes();
     const char* object_sc_list = collate_objects();
@@ -265,74 +271,237 @@ int main() {
         last_world_mouse = world_mouse;
 
         if( !lmb ) {
+            state.hover.clear();
             hover_items( state, world_mouse );
         }
 
-        switch( state.mode ) {
-            case Mode::SELECT: {
-                if( lmb_press ) {
-                    if(
-                        state.hover.object_exclusive() &&
-                        state.hover.object_indexes.len
-                    ) {
-                        state.selection.type   = SelectionType::OBJECT;
-                        state.selection.object =
-                            state.storage.objects.buf + state.hover.object_indexes.buf[0];
-                        state.inspector.is_dirty = true;
-                    } else if(
-                        state.hover.vertex_exclusive() &&
-                        state.hover.vertex_indexes.len
-                    ) {
-                        state.selection.type   = SelectionType::VERTEX;
-                        state.selection.vertex =
-                            state.storage.vertexes.buf + state.hover.vertex_indexes.buf[0];
-                        state.inspector.is_dirty = true;
-                    } else if(
-                        state.hover.segment_exclusive() &&
-                        state.hover.segment_indexes.len
-                    ) {
-                        state.selection.type    = SelectionType::SEGMENT;
-                        state.selection.segment =
-                            state.storage.segments.buf + state.hover.segment_indexes.buf[0];
-                        state.inspector.is_dirty = true;
-                    } else if( CheckCollisionPointRec( mouse, Rectangle{ 0, (float)TOP_PANEL_HEIGHT, draw_area.x, draw_area.y } ) ) {
-                        state.selection.type     = SelectionType::NONE;
-                        state.selection.object   = nullptr;
-                        state.inspector.is_dirty = true;
-                    }
-                }
+        if( 
+            (mouse.x > 0)                              &&
+            (mouse.y > 0)                              &&
+            (mouse.x < (scr_width - SIDE_PANEL_WIDTH)) &&
+            (mouse.y > TOP_PANEL_HEIGHT)
+        ) {
+            switch( state.mode ) {
+                case Mode::BUILD: {
+                    if( lmb_press ) {
+                        if( state.hover.vertex_indexes.len ) {
+                            int index = state.hover.vertex_indexes.buf[0];
 
-                if( state.hover.object_exclusive() && lmb ) {
-                    for( int idx = 0; idx < state.hover.object_indexes.len; ++idx ) {
-                        auto* o =
-                            state.storage.objects.buf +
-                            state.hover.object_indexes.buf[idx];
-                        o->position += world_delta;
-                    }
-                }
-                if( state.hover.vertex_exclusive() && lmb ) {
-                    for( int idx = 0; idx < state.hover.vertex_indexes.len; ++idx ) {
-                        auto* v =
-                            state.storage.vertexes.buf + 
-                            state.hover.vertex_indexes.buf[idx];
-                        v->position += world_delta;
-                    }
-                }
-                if( state.hover.segment_exclusive() && lmb ) {
-                    for( int idx = 0; idx < state.hover.segment_indexes.len; ++idx ) {
-                        auto* s =
-                            state.storage.segments.buf + 
-                            state.hover.segment_indexes.buf[idx];
-                        Vector2& start = state.storage.vertexes.buf[s->start].position;
-                        Vector2& end   = state.storage.vertexes.buf[s->end].position;
+                            if( state.build.previous_index >= 0 ) {
+                                EdSegment segment = {};
+                                segment.start = state.build.previous_index;
+                                segment.end   = index;
+                                segment.tint  = WHITE;
 
-                        start += world_delta;
-                        end   += world_delta;
-                    }
-                }
-            } break;
+                                buf_append( &state.storage.segments, segment );
+                                state.build.previous_index = -1;
+                            } else {
+                                state.build.previous_index = index;
+                            }
+                        } else {
+                            EdVertex vertex = {};
+                            vertex.position = world_mouse;
+                            int this_index = state.storage.vertexes.len;
+                            buf_append( &state.storage.vertexes, vertex );
 
-            case Mode::COUNT: break;
+                            if( state.build.previous_index >= 0 ) {
+                                EdSegment segment = {};
+                                segment.start = state.build.previous_index;
+                                segment.end   = this_index;
+                                segment.tint  = WHITE;
+
+                                buf_append( &state.storage.segments, segment );
+                            }
+
+                            state.build.previous_index = this_index;
+                        }
+                    }
+                    if( rmb_press ) {
+                        state.build.previous_index = -1;
+                    }
+                } break;
+                case Mode::SELECT: {
+                    if( lmb_press ) {
+                        if(
+                            state.hover.object_exclusive() &&
+                            state.hover.object_indexes.len
+                        ) {
+                            state.selection.type   = SelectionType::OBJECT;
+                            state.selection.object =
+                                state.storage.objects.buf + state.hover.object_indexes.buf[0];
+                            state.inspector.is_dirty = true;
+                        } else if(
+                            state.hover.vertex_exclusive() &&
+                            state.hover.vertex_indexes.len
+                        ) {
+                            state.selection.type   = SelectionType::VERTEX;
+                            state.selection.vertex =
+                                state.storage.vertexes.buf + state.hover.vertex_indexes.buf[0];
+                            state.inspector.is_dirty = true;
+                        } else if(
+                            state.hover.segment_exclusive() &&
+                            state.hover.segment_indexes.len
+                        ) {
+                            state.selection.type    = SelectionType::SEGMENT;
+                            state.selection.segment =
+                                state.storage.segments.buf + state.hover.segment_indexes.buf[0];
+                            state.inspector.is_dirty = true;
+                        } else if( CheckCollisionPointRec( mouse, Rectangle{ 0, (float)TOP_PANEL_HEIGHT, draw_area.x, draw_area.y } ) ) {
+                            state.selection.type     = SelectionType::NONE;
+                            state.selection.object   = nullptr;
+                            state.inspector.is_dirty = true;
+                        }
+                    }
+                    if( lmb_release ) {
+                        state.triangles_dirty = true;
+                    }
+
+                    if( state.hover.object_exclusive() ) {
+                        if( lmb ) {
+                            for( int idx = 0; idx < state.hover.object_indexes.len; ++idx ) {
+                                auto* o =
+                                    state.storage.objects.buf +
+                                    state.hover.object_indexes.buf[idx];
+                                o->position += world_delta;
+                            }
+                        } else if( rmb_press ) {
+                            auto* indexes = &state.hover.object_indexes;
+                            auto* buf     = &state.storage.objects;
+
+                            if( indexes->len ) {
+                                int idx     = indexes->buf[indexes->len - 1];
+                                int obj_idx = indexes->buf[idx];
+
+                                auto* obj = buf->buf + obj_idx;
+                                TraceLog(
+                                    LOG_INFO, "Removing %s @ { %f, %f }",
+                                    to_string( obj->type ), obj->position.x, obj->position.y );
+
+                                buf->buf[obj_idx] = buf->buf[--state.storage.objects.len];
+                            }
+                        }
+                    }
+
+                    if( state.hover.vertex_exclusive() ) {
+                        if( lmb ) {
+                            for( int idx = 0; idx < state.hover.vertex_indexes.len; ++idx ) {
+                                auto* v =
+                                    state.storage.vertexes.buf + 
+                                    state.hover.vertex_indexes.buf[idx];
+                                v->position += world_delta;
+                            }
+                        } else if( rmb_press ) {
+                            int vertex_to_remove = state.hover.vertex_indexes.buf[0];
+
+                            auto* vertexes = &state.storage.vertexes;
+                            auto* segments = &state.storage.segments;
+
+                            if( segments->len > 1 ) {
+                                EdSegment* left = nullptr, *right = nullptr;
+                                for( int i = 0; i < segments->len; ++i ) {
+                                    auto* s = segments->buf + i;
+                                    if( s->end == vertex_to_remove ) {
+                                        left = s;
+                                        continue;
+                                    }
+                                    if( s->start == vertex_to_remove ) {
+                                        right = s;
+                                        continue;
+                                    }
+                                }
+
+                                if( left && right ) {
+                                    left->end = right->end;
+
+                                    int right_idx = (int)(right - segments->buf);
+                                    buf_swap_remove( segments, right_idx );
+                                }
+
+                                for( int i = 0; i < segments->len; ++i ) {
+                                    auto* s = segments->buf + i; 
+                                    if( s->start > vertex_to_remove ) {
+                                        s->start--;
+                                    }
+                                    if( s->end > vertex_to_remove ) {
+                                        s->end--;
+                                    }
+                                }
+
+                                buf_remove( vertexes, vertex_to_remove );
+                            } else {
+                                buf_swap_remove( segments, 0 );
+                                buf_swap_remove( vertexes, vertex_to_remove );
+                            }
+
+                        }
+                    }
+                    if( state.hover.segment_exclusive() ) {
+                        if( lmb ) {
+                            for( int idx = 0; idx < state.hover.segment_indexes.len; ++idx ) {
+                                auto* s =
+                                    state.storage.segments.buf + 
+                                    state.hover.segment_indexes.buf[idx];
+                                Vector2& start = state.storage.vertexes.buf[s->start].position;
+                                Vector2& end   = state.storage.vertexes.buf[s->end].position;
+
+                                start += world_delta;
+                                end   += world_delta;
+                            }
+                        } else if( rmb_press ) {
+                            auto* idx      = &state.hover.segment_indexes;
+                            auto* segments = &state.storage.segments;
+
+                            for( int i = 0; i < idx->len; ++i ) {
+                                buf_swap_remove( segments, idx->buf[i] );
+                            }
+                        }
+                    }
+
+                } break;
+                case Mode::PUT: {
+                    if( lmb_press ) {
+                        EdObject obj = {};
+                        obj.type     = state.put.type;
+                        obj.position = world_mouse;
+                        obj.rotation = 0.0;
+                        buf_append( &state.storage.objects, obj );
+
+                        TraceLog(
+                            LOG_INFO, "Put %s @ { %f, %f }",
+                            to_string( obj.type ), world_mouse.x, world_mouse.y );
+                    }
+                    if( rmb_press ) {
+                        auto* indexes = &state.hover.object_indexes;
+                        auto* buf     = &state.storage.objects;
+
+                        if( indexes->len ) {
+                            int idx     = indexes->buf[indexes->len - 1];
+                            int obj_idx = indexes->buf[idx];
+
+                            auto* obj = buf->buf + obj_idx;
+                            TraceLog(
+                                LOG_INFO, "Removing %s @ { %f, %f }",
+                                to_string( obj->type ), obj->position.x, obj->position.y );
+
+                            buf->buf[obj_idx] = buf->buf[--state.storage.objects.len];
+                        }
+                    }
+
+                    int k = (anykey - KEY_ZERO);
+                    if( k >= 0 && k < (int)ObjectType::COUNT ) {
+                        ObjectType t = (ObjectType)k;
+                        state.put.type = t;
+                    }
+                } break;
+
+                case Mode::COUNT: break;
+            }
+        }
+
+        if( triangulate( state ) ) {
+            TraceLog( LOG_INFO, "Retriangulated level." );
+            TraceLog( LOG_INFO, "Vertex count: %i", state.triangle_positions.len );
+            TraceLog( LOG_INFO, "Index count:  %i", state.triangle_indexes.len );
         }
 
         BeginDrawing();
@@ -462,68 +631,101 @@ int main() {
                     }
                 }
 
-                switch( state.selection.type ) {
-                    case NONE:    break;
-                    case OBJECT: {
-                        Rectangle rect = {};
-                        auto* obj = state.selection.object;
-                        ObjectShapeDescription shape = object_shape( obj->type );
-                        switch( shape.shape ) {
-                            case ObjectShape::CIRCLE: {
-                                rect.x      = obj->position.x - shape.circle.radius;
-                                rect.y      = obj->position.y - shape.circle.radius;
-                                rect.width  = shape.circle.radius * 2.0;
-                                rect.height = shape.circle.radius * 2.0;
-                            } break;
-                            case ObjectShape::RECTANGLE: {
-                                NonAxisAlignedRect r = gen_non_axis_aligned_rect(
-                                    obj->position, shape.rectangle.size, obj->rotation );
+                // NOTE(alicia): draw selection outline
+                switch( state.mode ) {
+                    case Mode::BUILD: {
+                        if( state.build.previous_index >= 0 ) {
+                            Vector2 prev =
+                                state.storage.vertexes.buf
+                                    [state.build.previous_index].position;
+                            DrawLineV( prev, world_mouse, WHITE );
+                        }
+                    } break;
+                    case Mode::PUT:
+                    case Mode::COUNT: break;
+                    case Mode::SELECT: {
+                        switch( state.selection.type ) {
+                            case NONE:    break;
+                            case OBJECT: {
+                                Rectangle rect = {};
+                                auto* obj = state.selection.object;
+                                ObjectShapeDescription shape = object_shape( obj->type );
+                                switch( shape.shape ) {
+                                    case ObjectShape::CIRCLE: {
+                                        rect.x      = obj->position.x - shape.circle.radius;
+                                        rect.y      = obj->position.y - shape.circle.radius;
+                                        rect.width  = shape.circle.radius * 2.0;
+                                        rect.height = shape.circle.radius * 2.0;
+                                    } break;
+                                    case ObjectShape::RECTANGLE: {
+                                        NonAxisAlignedRect r = gen_non_axis_aligned_rect(
+                                            obj->position, shape.rectangle.size, obj->rotation );
 
-                                Vector2 _min = { 20000, 20000 }, _max = {};
-                                for( int i = 0; i < 4; ++i ) {
-                                    Vector2 p = r.points[i];
-                                    if( p.x < _min.x ) {
-                                        _min.x = p.x;
-                                    }
-                                    if( p.y < _min.y ) {
-                                        _min.y = p.y;
-                                    }
-                                    if( p.x > _max.x ) {
-                                        _max.x = p.x;
-                                    }
-                                    if( p.y > _max.y ) {
-                                        _max.y = p.y;
-                                    }
+                                        Vector2 _min = { 20000, 20000 },
+                                                _max = { -200000, -200000 };
+                                        for( int i = 0; i < 4; ++i ) {
+                                            Vector2 p = r.points[i];
+                                            if( p.x < _min.x ) {
+                                                _min.x = p.x;
+                                            }
+                                            if( p.y < _min.y ) {
+                                                _min.y = p.y;
+                                            }
+                                            if( p.x > _max.x ) {
+                                                _max.x = p.x;
+                                            }
+                                            if( p.y > _max.y ) {
+                                                _max.y = p.y;
+                                            }
+                                        }
+
+                                        rect.x      = _min.x - 0.1;
+                                        rect.y      = _min.y - 0.1;
+                                        rect.width  = abs(_max.x - _min.x) + 0.2;
+                                        rect.height = abs(_max.y - _min.y) + 0.2;
+                                    } break;
                                 }
 
-                                rect.x      = _min.x - 0.1;
-                                rect.y      = _min.y - 0.1;
-                                rect.width  = (_max.x - _min.x) + 0.2;
-                                rect.height = (_max.y - _min.y) + 0.2;
+                                DrawRectangleLinesRec( rect, GREEN );
+                            } break;
+                            case VERTEX: {
+                                Rectangle rect = {
+                                    state.selection.vertex->position.x,
+                                    state.selection.vertex->position.y,
+                                    VERTEX_RADIUS + 0.2,
+                                    VERTEX_RADIUS + 0.2,
+                                };
+                                rect.x -= rect.width  / 2.0;
+                                rect.y -= rect.height / 2.0;
+
+                                DrawRectangleLinesRec( rect, GREEN );
+                            } break;
+                            case SEGMENT: {
+                                Vector2 start =
+                                    state.storage.vertexes.buf[state.selection.segment->start]
+                                        .position;
+                                Vector2 end =
+                                    state.storage.vertexes.buf[state.selection.segment->end]
+                                        .position;
+                                DrawLineV( start, end, GREEN );
                             } break;
                         }
+                    } break;
+                }
 
-                        DrawRectangleLinesRec( rect, GREEN );
-                    } break;
-                    case VERTEX: {
-                        Rectangle rect = {
-                            state.selection.vertex->position.x,
-                            state.selection.vertex->position.y,
-                            VERTEX_RADIUS + 0.2,
-                            VERTEX_RADIUS + 0.2,
-                        };
-                        rect.x -= rect.width  / 2.0;
-                        rect.y -= rect.height / 2.0;
+                /* Draw level mesh */ {
+                    auto* t = &state.triangle_indexes;
+                    auto* v = &state.triangle_positions;
+                    for( int i = 0; i < t->len; i += 3 ) {
+                        int i0 = t->buf[i + 0];
+                        int i1 = t->buf[i + 1];
+                        int i2 = t->buf[i + 2];
+                        Vector2 p0 = { v->buf[i0].x, v->buf[i0].z };
+                        Vector2 p1 = { v->buf[i1].x, v->buf[i1].z };
+                        Vector2 p2 = { v->buf[i2].x, v->buf[i2].z };
 
-                        DrawRectangleLinesRec( rect, GREEN );
-                    } break;
-                    case SEGMENT: {
-                        Vector2 start =
-                            state.storage.vertexes.buf[state.selection.segment->start].position;
-                        Vector2 end =
-                            state.storage.vertexes.buf[state.selection.segment->end].position;
-                        DrawLineV( start, end, GREEN );
-                    } break;
+                        DrawTriangle( p0, p1, p2, ColorAlpha( WHITE, 0.2 ) );
+                    }
                 }
 
             } EndMode2D();
@@ -571,11 +773,27 @@ int main() {
                     mode_name_position, FONT_SIZE, 1.0, color );
                 mode_name_position.y += FONT_SIZE;
             }
+
+            if( state.mode == Mode::PUT ) {
+                mode_name_position.y += FONT_SIZE;
+                for( int i = 0; i < (int)ObjectType::COUNT; ++i ) {
+                    Color color;
+                    if( (ObjectType)i == state.put.type ) {
+                        color = GetColor( GuiGetStyle( DEFAULT, TEXT_COLOR_NORMAL ) );
+                    } else {
+                        color = GetColor( GuiGetStyle( DEFAULT, TEXT_COLOR_DISABLED ) );
+                    }
+                    DrawTextEx(
+                        font, TextFormat( "%i - %s", i, to_string( (ObjectType)i ) ),
+                        mode_name_position, FONT_SIZE, 1.0, color );
+                    mode_name_position.y += FONT_SIZE;
+                }
+            }
             Vector2 mode_description_size = MeasureTextEx(
                 font, mode_description( state.mode ), FONT_SIZE, 1.0 );
             Vector2 mode_description_position = {
                 map_area.x + GUI_GUTTER,
-                map_area.y + (map_area.height - mode_description_size.y) };
+                map_area.y + (map_area.height - (mode_description_size.y + GUI_GUTTER)) };
             DrawTextEx( font, mode_description( state.mode ), mode_description_position, FONT_SIZE, 1.0, GetColor( GuiGetStyle( DEFAULT, TEXT_COLOR_NORMAL )) );
 
             Rectangle top_bar = {
@@ -603,7 +821,8 @@ int main() {
                 SIDE_PANEL_WIDTH,
                 scr_height - top_bar.height
             };
-            GuiPanel( side_bar, "Inspector" ); {
+            GuiPanel( side_bar, "Inspector" );
+            if( state.mode == Mode::SELECT ) {
                 side_bar.x      += 10.0;
                 side_bar.y      += 10.0 + TOP_PANEL_HEIGHT;
                 side_bar.width  -= (10.0) * 2.0;
@@ -892,20 +1111,157 @@ int main() {
     return 0;
 }
 void set_mode( State& state, Mode new_mode ) {
-    state.selection = {};
-    state.mode      = new_mode;
+    state.mode = new_mode;
 
     switch( state.mode ) {
-        case Mode::SELECT: break;
+        case Mode::SELECT: {
+            state.selection = {};
+        } break;
+        case Mode::PUT: {
+            state.put = {};
+        } break;
+        case Mode::BUILD: {
+            state.build.previous_index = -1;
+        } break;
 
         case Mode::COUNT:  break;
     }
 }
+struct PositionAndCenter {
+    Vector3 p;
+    Vector3 center;
+};
+float cross_product( Vector3 a, Vector3 b, Vector3 c ) {
+    return (b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x);
+}
+bool point_in_triangle( Vector3 p, Vector3 a, Vector3 b, Vector3 c ) {
+    Vector3 v0 = { c.x - a.x, 0, c.z - a.z };
+    Vector3 v1 = { b.x - a.x, 0, b.z - a.z };
+    Vector3 v2 = { p.x - a.x, 0, p.z - a.z };
+
+    float dot00 = v0.x * v0.x + v0.y * v0.y;
+    float dot01 = v0.x * v1.x + v0.y * v1.y;
+    float dot02 = v0.x * v2.x + v0.y * v2.y;
+    float dot11 = v1.x * v1.x + v1.y * v1.y;
+    float dot12 = v1.x * v2.x + v1.y * v2.y;
+
+    float denom = dot00 * dot11 - dot01 * dot01;
+    if( !denom ) {
+        return false;
+    }
+
+    float inv_denom = 1.0 / denom;
+    float u = (dot11 * dot02 - dot01 * dot12) * inv_denom;
+    float v = (dot00 * dot12 - dot01 * dot02) * inv_denom;
+
+    return (u >= 0) && (v >= 0) && (u + v <= 1);
+}
+bool is_ear(
+    int previous, int current, int next,
+    VertexBuffer* pos, IndexBuffer* idx, int count
+) {
+    Vector3 a = pos->buf[idx->buf[previous]];
+    Vector3 b = pos->buf[idx->buf[current]];
+    Vector3 c = pos->buf[idx->buf[next]];
+
+    if( cross_product( a, b, c ) <= 0 ) {
+        return false;
+    }
+
+    for( int i = 0; i < count; ++i ) {
+        if( i == previous || i == current || i == next ) {
+            continue;
+        }
+        Vector3 point = pos->buf[idx->buf[i]];
+
+        if( point_in_triangle( point, a, b, c ) ) {
+            return false;
+        }
+    }
+
+    return true;
+}
+Vector3 center = {};
+extern "C"
+int v3_cmp_qsort( const void* vp1, const void* vp2 ) {
+    Vector3 c  = center;
+    Vector3 v1 = *(Vector3*)vp1;
+    Vector3 v2 = *(Vector3*)vp2;
+
+    float angle_v1 = atan2( v1.z - c.z, v1.x - c.x );
+    float angle_v2 = atan2( v2.z - c.z, v2.x - c.x );
+
+    int result = angle_v1 == angle_v2 ? 0 : angle_v1 > angle_v2 ? 1 : -1;
+
+    TraceLog( LOG_INFO, "%f, %f -> %i", angle_v1, angle_v2, result );
+    return result;
+}
+bool triangulate( State& state ) {
+    if( !state.triangles_dirty || !state.storage.vertexes.len ) {
+        return false;
+    }
+    state.triangles_dirty = false;
+
+    auto* v   = &state.storage.vertexes;
+    auto* pos = &state.triangle_positions;
+    auto* idx = &state.triangle_indexes;
+
+    pos->len = idx->len = 0;
+
+    for( int i = 0; i < v->len; ++i ) {
+        auto* vertex = v->buf + i;
+        buf_append( pos, v3( vertex->position.x, 0.0, vertex->position.y ) );
+    }
+    // NOTE(alicia): sort into CCW
+    center = {};
+    for( int i = 0; i < pos->len; ++i ) {
+        center += pos->buf[i];
+    }
+    center /= (float)pos->len;
+    qsort( pos->buf, pos->len, sizeof(Vector3), v3_cmp_qsort );
+
+    IndexBuffer idx2 = {};
+    for( int i = 0; i < pos->len; ++i ) {
+        buf_append( &idx2, i );
+    }
+
+    int rem = pos->len;
+    while( rem > 3 ) {
+        bool ear_found = false;
+
+        for( int i = 0; i < rem; ++i ) {
+            int previous = ( i - 1 + rem ) % rem;
+            int current  = i;
+            int next     = ( i + 1 ) % rem;
+
+            if( is_ear( previous, current, next, pos, &idx2, rem ) ) {
+                buf_append( idx, idx2.buf[current] );
+                buf_append( idx, idx2.buf[previous] );
+                buf_append( idx, idx2.buf[next] );
+
+                for( int j = current; j < (rem - 1); ++j ) {
+                    idx2.buf[j] = idx2.buf[j + 1];
+                }
+                rem--;
+
+                ear_found = true;
+                break;
+            }
+        }
+
+        unused(ear_found);
+    }
+
+    buf_append( idx, idx2.buf[1] );
+    buf_append( idx, idx2.buf[0] );
+    buf_append( idx, idx2.buf[2] );
+
+    free( idx2.buf );
+    return true;
+}
 void hover_items(
     State& state, Vector2 mouse_world_position
 ) {
-    state.hover.clear();
-
     for( int i = 0; i < state.storage.objects.len; ++i ) {
         auto* o = state.storage.objects.buf + i;
         bool is_hovering;
@@ -920,7 +1276,7 @@ void hover_items(
                 NonAxisAlignedRect rect = gen_non_axis_aligned_rect(
                     o->position, shape_desc.rectangle.size, o->rotation );
 
-                Vector2 _min = { 20000, 20000 }, _max = {};
+                Vector2 _min = { 20000, 20000 }, _max = { -200000, -200000 };
                 for( int i = 0; i < 4; ++i ) {
                     Vector2 p = rect.points[i];
                     if( p.x < _min.x ) {
@@ -940,8 +1296,8 @@ void hover_items(
                 Rectangle r;
                 r.x      = _min.x;
                 r.y      = _min.y;
-                r.width  = (_max.x - _min.x);
-                r.height = (_max.y - _min.y);
+                r.width  = abs(_max.x - _min.x);
+                r.height = abs(_max.y - _min.y);
 
                 is_hovering = CheckCollisionPointRec( mouse_world_position, r );
             } break;
@@ -1027,6 +1383,8 @@ const char* collate_objects() {
 const char* to_string( Mode mode ) {
     switch( mode ) {
         case Mode::SELECT: return TextFormat( "[%c] - Select Mode", mode_key( mode ) ); // "Select";
+        case Mode::PUT:    return TextFormat( "[%c] - Put Mode", mode_key( mode ) );
+        case Mode::BUILD:  return TextFormat( "[%c] - Build Mode", mode_key( mode ) );
 
         case Mode::COUNT: break;
     }
@@ -1040,8 +1398,18 @@ const char* mode_description( Mode mode ) {
             "MMB Drag - Move camera.\n"
             "RMB Press - [Vertex] Remove vertex.\n"
             "RMB Press - [Segment] Collapse line segment.\n"
+            "RMB Press - [Object] Remove object.\n"
             "Shift + RMB Press - [Vertex] Split vertex.\n"
-            "Shift + RMB Press - [Segment] Split line segment.\n"
+            "Shift + RMB Press - [Segment] Split line segment."
+            ;
+        case Mode::PUT: return
+            "LMB Press - Place object.\n"
+            "MMB Drag  - Move camera.\n"
+            "RMB Press - Remove object."
+            ;
+        case Mode::BUILD: return
+            "LMB Press - Place vertex/start building lines.\n"
+            "RMB Press - Stop building."
             ;
         case Mode::COUNT: break;
     }
@@ -1050,6 +1418,8 @@ const char* mode_description( Mode mode ) {
 int mode_key( Mode mode ) {
     switch( mode ) {
         case Mode::SELECT:  return KEY_Q;
+        case Mode::PUT:     return KEY_W;
+        case Mode::BUILD:   return KEY_E;
         case Mode::COUNT:   break;
     }
     return KEY_NULL;

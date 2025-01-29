@@ -21,6 +21,18 @@
     (_buf)->buf[(_buf)->len++] = (item); \
 } while(0)
 
+#define buf_remove( _buf, index ) do { \
+    int stride = sizeof((_buf)->buf[0]); \
+    memmove( \
+        (_buf)->buf + index, \
+        (_buf)->buf + index + 1, \
+        stride * ((_buf)->len - index) ); \
+    (_buf)->len--; \
+} while(0)
 
+#define buf_swap_remove( _buf, index ) do { \
+    (_buf)->len--; \
+    (_buf)->buf[index] = (_buf)->buf[(_buf)->len]; \
+} while(0)
 
 #endif /* header guard */

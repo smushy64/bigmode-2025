@@ -8,6 +8,7 @@
 */
 #include "raylib.h"
 #include "raymath.h"
+#include <stdint.h>
 
 #define readonly() static const constexpr
 
@@ -19,6 +20,8 @@ readonly() float E_CHASE_MAX_VELOCITY  = 25.0;
 
 readonly() float E_RETURN_HOME_DISTANCE = 0.1;
 
+readonly() float E_DEFAULT_RADIUS = 15.0;
+
 enum class EnemyState {
     IDLE,
     SCAN,
@@ -29,10 +32,13 @@ enum class EnemyState {
 };
 const char* to_string( EnemyState state );
 
+extern uintptr_t obj_enemy_offset;
+
 struct Enemy {
     EnemyState state;
     Vector3    velocity;
     Vector3    home;
+    Vector3    facing_direction;
     float      radius;
     float      power;
     float      timer;
@@ -47,7 +53,7 @@ struct Enemy {
     inline
     Vector3 direction_to_home_sqr() const {
         // TODO(alicia): assuming that the relative offset of position won't change . . .
-        Vector3 position = *(Vector3*)((char*)this - 24);
+        Vector3 position = *(Vector3*)((char*)this - obj_enemy_offset);
         return home - position;
     }
     inline

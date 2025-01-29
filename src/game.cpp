@@ -4,6 +4,7 @@
  * @author Alicia Amarilla (smushyaa@gmail.com)
  * @date   January 24, 2025
 */
+// IWYU pragma: begin_keep
 #include "raylib.h"
 #include "raymath.h"
 #include "raygui.h"
@@ -19,8 +20,11 @@
 #include "audio.h"
 
 #include <string.h>
+// IWYU pragma: end_keep
 
-void spawn_enemy( GlobalState* state, Vector3 position, float rotation, float radius = 10.0f );
+void spawn_enemy(
+    GlobalState* state, Vector3 position,
+    float rotation, float radius = E_DEFAULT_RADIUS );
 void load_sound_set( SoundBuffer* buf, const char* name );
 void mode_game_load( GlobalState* state ) {
     auto* game   = &state->transient.game;
@@ -35,7 +39,6 @@ void mode_game_load( GlobalState* state ) {
     player->max_velocity       = MAX_WALK_VELOCITY;
     player->max_power = player->power_target = player->power = START_MAX_POWER;
 
-    // game->player_model = LoadModel( "resources/meshes/plug_bot.glb" );
     game->player_model = LoadModel( "resources/meshes/SKM_Plugbot.glb" );
 
     /* White texture */ {
@@ -104,6 +107,8 @@ void mode_game_update( GlobalState* state, float dt ) {
                 case ObjectType::ENEMY: {
                     obj->enemy.timer += dt;
 
+                    Vector3 current_direction = Vector3Normalize( obj->enemy.velocity );
+
                     EnemyState start_state = obj->enemy.state;
 
                     float max_velocity = E_WANDER_MAX_VELOCITY;
@@ -142,27 +147,16 @@ void mode_game_update( GlobalState* state, float dt ) {
                                 if( dist_to_home ) {
                                     to_home /= dist_to_home;
                                 }
-                                float diff = abs( dist_to_home - obj->enemy.radius );
 
-                                bool flipped = false;
-                                float dot = Vector3DotProduct( to_home, to_target );
+                                float diff = abs( dist_to_home - obj->enemy.radius );
                                 if(
-                                    diff < (obj->enemy.radius / 10.0) && dot < 0.0
+                                    diff < (obj->enemy.radius / 8.0) &&
+                                    Vector3DotProduct( to_home, to_target ) < 0.0
                                 ) {
-                                    to_target = Vector3Reflect(
-                                        to_target, Vector3Perpendicular( to_target ) );
-                                    flipped   = true;
+                                    to_target = Vector3Reflect( to_target, -to_target );
                                 }
 
                                 obj->enemy.wander.target = to_target;
-
-                                TraceLog( LOG_INFO, "--------------------------");
-                                TraceLog( LOG_INFO, "dist to home:     %f", dist_to_home );
-                                TraceLog( LOG_INFO, "diff:             %f", diff );
-                                TraceLog( LOG_INFO, "dot:              %f", dot );
-                                TraceLog( LOG_INFO, "flipped:          %s", flipped ? "true" : "false" );
-                                TraceLog( LOG_INFO, "wander direction: { %f, %f, %f }", to_target.x, to_target.y, to_target.z );
-                                TraceLog( LOG_INFO, "--------------------------");
 
                             }
 
@@ -177,12 +171,14 @@ void mode_game_update( GlobalState* state, float dt ) {
                             } else if( obj->enemy.timer >= E_WANDER_TIME ) {
                                 obj->enemy.state = EnemyState::IDLE;
                             }
+
                         } break;
                         case EnemyState::CHASING: {
                             max_velocity = E_CHASE_MAX_VELOCITY;
                             // TODO(alicia): 
                         } break;
                         case EnemyState::RETURN_HOME: {
+
                             Vector3 direction = obj->enemy.direction_to_home_sqr();
                             float   distance  = Vector3Length( direction );
                             if( distance ) {
@@ -205,7 +201,9 @@ void mode_game_update( GlobalState* state, float dt ) {
                         } break;
                     }
 
-                    Vector2 lateral_velocity = { obj->enemy.velocity.x, obj->enemy.velocity.y };
+                    obj->enemy.facing_direction = current_direction;
+
+                    Vector2 lateral_velocity = { obj->enemy.velocity.x, obj->enemy.velocity.z };
                     lateral_velocity =
                         Vector2ClampValue( lateral_velocity, 0.0, max_velocity );
                     obj->enemy.velocity.x = lateral_velocity.x;
@@ -221,7 +219,7 @@ void mode_game_update( GlobalState* state, float dt ) {
                         obj->enemy.first_frame_state = false;
                     }
 
-                    // TraceLog( LOG_INFO, "%s", to_string( obj->enemy.state ) );
+                    obj->position.y = 0.0;
                 } break;
                 case ObjectType::PLAYER_SPAWN:
                 case ObjectType::BATTERY:
@@ -545,7 +543,8 @@ void game_draw( GlobalState* state, float dt ) {
             switch( obj->type ) {
                 case ObjectType::ENEMY: {
                     Quaternion rot =
-                        QuaternionFromAxisAngle( { 0.0, 1.0, 0.0 }, obj->rotation );
+                        QuaternionFromVector3ToVector3(
+                            { 0.0, 0.0, -1.0 }, obj->enemy.facing_direction );
                     transform =
                         QuaternionToMatrix( rot ) *
                         MatrixTranslate( obj->position.x, obj->position.y, obj->position.z );
@@ -559,7 +558,7 @@ void game_draw( GlobalState* state, float dt ) {
                     if( obj->enemy.state == EnemyState::WANDER ) {
                         Vector3 start = obj->position + Vector3{ 0.0, 1.0, 0.0 };
                         Vector3 end   = start + obj->enemy.wander.target;
-                        DrawLine3D( start, end, RAYWHITE );
+                        DrawCylinderEx( start, end, 0.1, 0.1, 8, WHITE );
                     }
                 } break;
 

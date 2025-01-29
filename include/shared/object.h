@@ -8,6 +8,8 @@
 */
 #include "raylib.h"
 #include "enemy.h"
+#include <stdint.h>
+#include <stddef.h>
 
 enum class ObjectType {
     NONE,
@@ -25,7 +27,6 @@ struct GlobalState;
 
 struct Object {
     Vector3    position;
-    float      rotation; // yaw
     ObjectType type;
     bool       is_active;
 
@@ -46,7 +47,6 @@ struct Object {
     Object create_enemy( Vector3 position, float rotation, float radius = 5.0f ) {
         Object result;
         result.position  = position;
-        result.rotation  = rotation;
         result.type      = ObjectType::ENEMY;
         result.is_active = true;
 
@@ -54,9 +54,13 @@ struct Object {
         result.enemy.home   = position;
         result.enemy.radius = radius;
         result.enemy.power  = 200.0f;
+        result.enemy.facing_direction =
+            Vector3RotateByAxisAngle( Vector3UnitX, Vector3UnitY, rotation );
         return result;
     }
 };
+inline
+uintptr_t obj_enemy_offset = offsetof( Object, enemy );
 
 inline
 const char* to_string( ObjectType type ) {
@@ -65,7 +69,7 @@ const char* to_string( ObjectType type ) {
         case ObjectType::PLAYER_SPAWN: return "Player Spawn";
         case ObjectType::ENEMY:        return "Enemy";
         case ObjectType::BATTERY:      return "Battery";
-        case ObjectType::LEVEL_EXIT:   return "Exit";
+        case ObjectType::LEVEL_EXIT:   return "Level Exit";
         
         case ObjectType::COUNT: break;
     }
