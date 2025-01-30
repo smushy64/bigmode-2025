@@ -93,9 +93,10 @@ void mode_game_update( GlobalState* state, float dt ) {
     if( IsKeyPressed( KEY_ESCAPE ) ) {
         set_pause( state, !game->is_paused );
     }
-
     if( !game->is_paused ) {
         player_update( state, dt );
+        Vector3 player_trigger_position = game->player.position + Vector3UnitY;
+        float   player_trigger_radius   = 2.0;
         
         for( int i = 0; i < game->objects.len; ++i ) {
             auto* obj = game->objects.buf;
@@ -118,24 +119,65 @@ void mode_game_update( GlobalState* state, float dt ) {
                             drag = 10.0;
 
                             if( obj->enemy.timer >= E_IDLE_TIME ) {
-                                // int chance = GetRandomValue( 0, 1000 );
-                                // if( chance > 200 ) {
-                                //     obj->enemy.state = EnemyState::SCAN;
-                                // } else {
-                                //     obj->enemy.state = EnemyState::WANDER;
-                                // }
-                                // TODO(alicia): 
+                                int lo  = 0;
+                                int hi  = 1000;
 
-                                obj->enemy.state = EnemyState::WANDER;
+                                int chance = GetRandomValue( lo, hi );
+
+                                if( chance > 250 ) {
+                                    obj->enemy.state = EnemyState::WANDER;
+                                } else {
+                                    obj->enemy.state = EnemyState::SCAN;
+                                }
                             }
                         } break;
                         case EnemyState::SCAN: {
                             drag = 10.0;
-                            // TODO(alicia): 
-                            obj->enemy.state = EnemyState::IDLE;
+
+                            Ray ray; {
+                                Vector3 start_direction = obj->enemy.facing_direction;
+                                Vector3 end_direction   = start_direction;
+                                start_direction = Vector3RotateByAxisAngle(
+                                    start_direction, Vector3UnitY, 45 * (180.0 / M_PI) );
+                                end_direction = Vector3RotateByAxisAngle(
+                                    end_direction, Vector3UnitY, -45 * (180.0 / M_PI) );
+
+                                float t = obj->enemy.timer / E_SCAN_TIME;
+                                Vector3 scan_direction =
+                                    Vector3Normalize(
+                                        Vector3Lerp( start_direction, end_direction, t ) );
+
+                                ray.position  = obj->position + Vector3UnitY;
+                                ray.direction = scan_direction;
+                            }
+                            auto col = GetRayCollisionSphere(
+                                ray, player_trigger_position, player_trigger_radius );
+                            if( col.distance < 0.0 ) {
+                                col.distance = -col.distance;
+                            }
+                            col.hit = false;
+
+                            if( col.hit && col.distance < E_SIGHT_RANGE ) {
+                                obj->enemy.state = EnemyState::ALERT;
+                            } else if( obj->enemy.timer >= E_SCAN_TIME ) {
+                                int lo  = 0;
+                                int hi  = 1000;
+
+                                int chance = GetRandomValue( lo, hi );
+
+                                if( chance > 250 ) {
+                                    obj->enemy.state = EnemyState::WANDER;
+                                } else {
+                                    obj->enemy.state = EnemyState::IDLE;
+                                }
+                            }
                         } break;
                         case EnemyState::ALERT: {
                             drag = 10.0;
+
+                            if( obj->enemy.timer >= E_ALERT_TIME ) {
+                                obj->enemy.state = EnemyState::CHASING;
+                            }
                         } break;
                         case EnemyState::WANDER: {
                             if( obj->enemy.first_frame_state ) {
@@ -156,12 +198,12 @@ void mode_game_update( GlobalState* state, float dt ) {
                                     to_target = Vector3Reflect( to_target, -to_target );
                                 }
 
-                                obj->enemy.wander.target = to_target;
+                                obj->enemy.wander.direction = to_target;
 
                             }
 
                             obj->enemy.velocity +=
-                                obj->enemy.wander.target * dt * 100.0;
+                                obj->enemy.wander.direction * dt * E_ACCELERATION;
 
                             if(
                                 Vector3LengthSqr( obj->position - obj->enemy.home ) >=
@@ -175,10 +217,21 @@ void mode_game_update( GlobalState* state, float dt ) {
                         } break;
                         case EnemyState::CHASING: {
                             max_velocity = E_CHASE_MAX_VELOCITY;
-                            // TODO(alicia): 
+
+                            Vector3 direction =
+                                Vector3Normalize( game->player.position - obj->position );
+
+                            obj->enemy.velocity +=
+                                direction * dt * E_ACCELERATION;
+
+                            if(
+                                Vector3LengthSqr( obj->position - obj->enemy.home ) >=
+                                (obj->enemy.radius * obj->enemy.radius)
+                            ) {
+                                obj->enemy.state = EnemyState::RETURN_HOME;
+                            }
                         } break;
                         case EnemyState::RETURN_HOME: {
-
                             Vector3 direction = obj->enemy.direction_to_home_sqr();
                             float   distance  = Vector3Length( direction );
                             if( distance ) {
@@ -190,13 +243,13 @@ void mode_game_update( GlobalState* state, float dt ) {
                                     obj->enemy.state = EnemyState::IDLE;
                                 } else {
                                     int chance = GetRandomValue( 0, 1000 );
-                                    if( chance < 500 ) {
+                                    if( chance < 400 ) {
                                         obj->enemy.state = EnemyState::IDLE;
                                     }
                                 }
                             } else {
                                 obj->enemy.velocity +=
-                                    direction * dt * 100.0f;
+                                    direction * dt * E_ACCELERATION;
                             }
                         } break;
                     }
@@ -212,14 +265,40 @@ void mode_game_update( GlobalState* state, float dt ) {
                     obj->position       += obj->enemy.velocity * dt;
                     obj->enemy.velocity *= 1.0 - dt * drag;
 
+                    if(
+                        obj->enemy.state != EnemyState::ALERT &&
+                        obj->enemy.state != EnemyState::CHASING
+                    ) {
+                        Ray ray; {
+                            ray.position  = obj->position + Vector3UnitY;
+                            ray.direction = current_direction;
+                        }
+                        auto col = GetRayCollisionSphere(
+                            ray, player_trigger_position, player_trigger_radius );
+                        if( col.distance < 0.0 ) {
+                            col.distance = -col.distance;
+                        }
+
+                        if( col.hit ) {
+                            if( col.distance < E_SIGHT_RANGE ) {
+                                obj->enemy.state = EnemyState::ALERT;
+                            }
+                            TraceLog( LOG_INFO, "Ray collided, distance: %f", col.distance );
+                        }
+                    }
+
                     if( start_state != obj->enemy.state ) {
                         obj->enemy.first_frame_state = true;
                         obj->enemy.timer             = 0;
+                        TraceLog(
+                            LOG_INFO, "[%i] Enemy State: %s",
+                            i, to_string( obj->enemy.state ) );
                     } else {
                         obj->enemy.first_frame_state = false;
                     }
 
                     obj->position.y = 0.0;
+
                 } break;
                 case ObjectType::PLAYER_SPAWN:
                 case ObjectType::BATTERY:
@@ -550,16 +629,6 @@ void game_draw( GlobalState* state, float dt ) {
                         MatrixTranslate( obj->position.x, obj->position.y, obj->position.z );
 
                     DrawMesh( game->player_model.meshes[0], mat, transform );
-
-                    DrawCircle3D(
-                        obj->enemy.home + Vector3{0.0, 0.1, 0.0},
-                        obj->enemy.radius, {1.0, 0.0, 0.0}, 90, GREEN );
-
-                    if( obj->enemy.state == EnemyState::WANDER ) {
-                        Vector3 start = obj->position + Vector3{ 0.0, 1.0, 0.0 };
-                        Vector3 end   = start + obj->enemy.wander.target;
-                        DrawCylinderEx( start, end, 0.1, 0.1, 8, WHITE );
-                    }
                 } break;
 
                 case ObjectType::PLAYER_SPAWN:
@@ -573,6 +642,87 @@ void game_draw( GlobalState* state, float dt ) {
         DrawPlane( {}, { 100.0, 100.0 }, RED );
 
         EndShaderMode();
+
+        for( int i = 0; i < game->objects.len; ++i ) {
+            auto* obj = game->objects.buf + i;
+            if( !obj->is_active ) {
+                continue;
+            }
+
+            switch( obj->type ) {
+                case ObjectType::ENEMY: {
+                    DrawCircle3D(
+                        obj->enemy.home + Vector3{0.0, 0.1, 0.0},
+                        obj->enemy.radius, {1.0, 0.0, 0.0}, 90, GREEN );
+
+                    float cylinder_thickness = 0.01;
+
+                    Vector3 start = obj->position + Vector3UnitY;
+
+                    DrawCylinderEx(
+                        start, start + (obj->enemy.facing_direction * E_SIGHT_RANGE),
+                        cylinder_thickness, cylinder_thickness, 8, GOLD );
+
+                    Vector3 player_trigger_position =
+                        game->player.position + Vector3UnitY;
+                    float   player_trigger_radius   = 2.0;
+
+                    switch( obj->enemy.state ) {
+                        case EnemyState::WANDER: {
+                            Vector3 end = start + (obj->enemy.wander.direction * 2.0);
+                            DrawCylinderEx(
+                                start, end, cylinder_thickness,
+                                cylinder_thickness, 8, WHITE );
+                        } break;
+                        case EnemyState::SCAN: {
+                            Vector3 start_direction = -obj->enemy.facing_direction;
+                            Vector3 end_direction   = start_direction;
+                            start_direction = Vector3RotateByAxisAngle(
+                                start_direction, Vector3UnitY, 45 * (180.0 / M_PI) );
+                            end_direction = Vector3RotateByAxisAngle(
+                                end_direction, Vector3UnitY, -45 * (180.0 / M_PI) );
+
+                            float t = obj->enemy.timer / E_SCAN_TIME;
+                            Vector3 current_direction =
+                                Vector3Normalize(
+                                    Vector3Lerp( start_direction, end_direction, t ) );
+
+                            Vector3 end;
+                            end = start_direction * E_SIGHT_RANGE;
+                            DrawCylinderEx(
+                                start, start + end,
+                                cylinder_thickness, cylinder_thickness, 8, WHITE );
+                            end = current_direction * E_SIGHT_RANGE;
+                            DrawCylinderEx(
+                                start, start + end,
+                                cylinder_thickness, cylinder_thickness, 8, GOLD );
+                            end = end_direction * E_SIGHT_RANGE;
+                            DrawCylinderEx(
+                                start, start + end,
+                                cylinder_thickness, cylinder_thickness, 8, WHITE );
+
+                            DrawSphereWires(
+                                player_trigger_position, player_trigger_radius, 6, 6, BLUE );
+                        } break;
+
+                        case EnemyState::ALERT: {
+                            DrawSphereWires(
+                                player_trigger_position, player_trigger_radius, 6, 6, RED );
+                        } break;
+
+                        case EnemyState::IDLE:
+                        case EnemyState::CHASING:
+                        case EnemyState::RETURN_HOME: break;
+                    }
+
+                } break;
+                case ObjectType::NONE:
+                case ObjectType::PLAYER_SPAWN:
+                case ObjectType::BATTERY:
+                case ObjectType::LEVEL_EXIT:
+                case ObjectType::COUNT: break;
+            }
+        }
 
         EndMode3D();
     }

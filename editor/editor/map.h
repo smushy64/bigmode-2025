@@ -10,12 +10,13 @@
 #include "shared/world.h"
 #include "shared/buffer.h"
 #include "raymath.h"
+#include <stddef.h>
 // IWYU pragma: end_keep
 
 struct EdObject;
 struct EdSegment;
-struct EdVertex;
-struct EdTexture;
+
+typedef Vector2 EdVertex;
 
 struct MapStorage {
     struct {
@@ -29,11 +30,6 @@ struct MapStorage {
         int       cap;
     } vertexes;
     struct {
-        EdTexture* buf;
-        int        len;
-        int        cap;
-    } textures;
-    struct {
         EdObject* buf;
         int       len;
         int       cap;
@@ -46,42 +42,20 @@ struct EdObject {
     ObjectType type;
 };
 
-struct EdVertex {
-    Vector2 position;
-};
-
 struct EdSegment {
     int start;
     int end;
 
     Color tint;
-    int   texture;
-
-    union {
-        struct {
-            bool is_flipped_normal : 1;
-            bool is_solid          : 1;
-        };
-        int __padding0;
-    };
 
     inline
     Vector2& start_vertex( MapStorage* storage ) {
-        return storage->vertexes.buf[this->start].position;
+        return storage->vertexes.buf[this->start];
     }
     inline
     Vector2& end_vertex( MapStorage* storage ) {
-        return storage->vertexes.buf[this->end].position;
+        return storage->vertexes.buf[this->end];
     }
-};
-
-struct EdTexture {
-    const char* path;
-    Texture     tex;
-
-    TextureFilter filter : 8;
-    TextureWrap   wrap   : 8;
-    bool          is_path_allocated;
 };
 
 enum class ObjectShape {

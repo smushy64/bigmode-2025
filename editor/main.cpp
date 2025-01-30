@@ -10,10 +10,12 @@
 #include "raymath.h"
 #include "rlgl.h"
 
+#include "shared/world.h"
 #include "editor/map.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include "../raygui/examples/custom_file_dialog/gui_window_file_dialog.h"
 // IWYU pragma: end_keep
 
 inline
@@ -49,7 +51,7 @@ int mode_key( Mode mode );
 const char* collate_modes();
 const char* collate_objects();
 
-enum SelectionType {
+enum class SelectionType {
     NONE,
     OBJECT,
     VERTEX,
@@ -112,14 +114,19 @@ struct IndexBuffer {
     int cap;
 };
 
+enum FileMode {
+    NONE,
+    SAVING,
+    LOADING,
+};
+
 struct State {
     MapStorage  storage;
     HoverResult hover;
     Mode        mode;
 
-    VertexBuffer triangle_positions;
-    IndexBuffer  triangle_indexes;
-    bool triangles_dirty;
+    FileMode file_mode;
+    GuiWindowFileDialogState file_dialog_state;
 
     union {
         Selection selection;
@@ -178,11 +185,14 @@ struct State {
         bool is_dirty;
     } inspector;
 };
-bool triangulate( State& state );
+Vector2 round( Vector2 v );
 void hover_items( State& state, Vector2 mouse_world_position );
 void set_mode( State& state, Mode mode );
+void save_map( State& state, const char* path );
+void load_map( State& state, const char* path );
 int main() {
     InitWindow( DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT, "BIGMODE Game Jam 2025 - Editor" );
+    SetExitKey( KEY_NULL );
 
     Font font = LoadFont( "resources/ui/fonts/RobotoCondensed/RobotoCondensed-Medium.ttf");
     SetTextureFilter( font.texture, TEXTURE_FILTER_BILINEAR );
@@ -202,7 +212,13 @@ int main() {
 
     State* _ptr_state = (State*)calloc( 1, sizeof(State) );
     State& state = *_ptr_state; 
-    state.triangles_dirty = true;
+
+    state.file_dialog_state = InitGuiWindowFileDialog( "resources/maps" );
+    state.file_dialog_state.windowBounds = {
+        (scr_width  / 2.0f) - (800 / 2.0f),
+        (scr_height / 2.0f) - (600 / 2.0f),
+        800.0f, 600.0f
+    };
 
     const char* modes = collate_modes();
     const char* object_sc_list = collate_objects();
@@ -230,6 +246,7 @@ int main() {
         bool    lmb_release = IsMouseButtonReleased( MOUSE_LEFT_BUTTON );
         bool    rmb_release = IsMouseButtonReleased( MOUSE_RIGHT_BUTTON );
         bool    mmb_release = IsMouseButtonReleased( MOUSE_MIDDLE_BUTTON );
+        bool    shift       = IsKeyDown( KEY_LEFT_SHIFT );
         Vector2 mouse       = GetMousePosition();
         Vector2 mouse_delta = GetMouseDelta();
         float   scroll      = GetMouseWheelMove() * SCROLL_SPEED;
@@ -279,7 +296,8 @@ int main() {
             (mouse.x > 0)                              &&
             (mouse.y > 0)                              &&
             (mouse.x < (scr_width - SIDE_PANEL_WIDTH)) &&
-            (mouse.y > TOP_PANEL_HEIGHT)
+            (mouse.y > TOP_PANEL_HEIGHT)               &&
+            state.file_mode == FileMode::NONE
         ) {
             switch( state.mode ) {
                 case Mode::BUILD: {
@@ -300,7 +318,7 @@ int main() {
                             }
                         } else {
                             EdVertex vertex = {};
-                            vertex.position = world_mouse;
+                            vertex = world_mouse;
                             int this_index = state.storage.vertexes.len;
                             buf_append( &state.storage.vertexes, vertex );
 
@@ -352,9 +370,6 @@ int main() {
                             state.inspector.is_dirty = true;
                         }
                     }
-                    if( lmb_release ) {
-                        state.triangles_dirty = true;
-                    }
 
                     if( state.hover.object_exclusive() ) {
                         if( lmb ) {
@@ -362,7 +377,11 @@ int main() {
                                 auto* o =
                                     state.storage.objects.buf +
                                     state.hover.object_indexes.buf[idx];
-                                o->position += world_delta;
+                                if( shift )  {
+                                    o->position = round( o->position * 10.0 ) / 10.0;
+                                } else {
+                                    o->position += world_delta;
+                                }
                             }
                         } else if( rmb_press ) {
                             auto* indexes = &state.hover.object_indexes;
@@ -388,7 +407,11 @@ int main() {
                                 auto* v =
                                     state.storage.vertexes.buf + 
                                     state.hover.vertex_indexes.buf[idx];
-                                v->position += world_delta;
+                                if( shift ) {
+                                    *v = round( *v * 10.0 ) / 10.0;
+                                } else {
+                                    *v += world_delta;
+                                }
                             }
                         } else if( rmb_press ) {
                             int vertex_to_remove = state.hover.vertex_indexes.buf[0];
@@ -441,11 +464,16 @@ int main() {
                                 auto* s =
                                     state.storage.segments.buf + 
                                     state.hover.segment_indexes.buf[idx];
-                                Vector2& start = state.storage.vertexes.buf[s->start].position;
-                                Vector2& end   = state.storage.vertexes.buf[s->end].position;
+                                Vector2& start = state.storage.vertexes.buf[s->start];
+                                Vector2& end   = state.storage.vertexes.buf[s->end];
 
-                                start += world_delta;
-                                end   += world_delta;
+                                if( shift ) {
+                                    start = round( start * 10.0 ) / 10.0;
+                                    end   = round( end * 10.0 ) / 10.0;
+                                } else {
+                                    start += world_delta;
+                                    end   += world_delta;
+                                }
                             }
                         } else if( rmb_press ) {
                             auto* idx      = &state.hover.segment_indexes;
@@ -498,12 +526,6 @@ int main() {
             }
         }
 
-        if( triangulate( state ) ) {
-            TraceLog( LOG_INFO, "Retriangulated level." );
-            TraceLog( LOG_INFO, "Vertex count: %i", state.triangle_positions.len );
-            TraceLog( LOG_INFO, "Index count:  %i", state.triangle_indexes.len );
-        }
-
         BeginDrawing();
         ClearBackground( BLACK );
 
@@ -520,7 +542,7 @@ int main() {
                 ) {
                     auto* v = state.storage.vertexes.buf + vertex_idx;
                     Color color = WHITE;
-                    DrawCircleLinesV( v->position, 0.05, color );
+                    DrawCircleLinesV( *v, 0.05, color );
                 }
                 if( state.hover.vertex_exclusive() ) {
                     for(
@@ -532,7 +554,7 @@ int main() {
                             state.storage.vertexes.buf +
                             state.hover.vertex_indexes.buf[idx];
                         Color color = WHITE;
-                        DrawCircleV( v->position, 0.05, color );
+                        DrawCircleV( *v, 0.05, color );
                     }
                 }
                 for(
@@ -546,8 +568,8 @@ int main() {
                     color.a = 255 / 2;
 
                     Vector2 start, end;
-                    start = state.storage.vertexes.buf[s->start].position;
-                    end   = state.storage.vertexes.buf[s->end].position;
+                    start = state.storage.vertexes.buf[s->start];
+                    end   = state.storage.vertexes.buf[s->end];
 
                     DrawLineV( start, end, color );
                 }
@@ -564,8 +586,8 @@ int main() {
                         Color color = s->tint;
 
                         Vector2 start, end;
-                        start = state.storage.vertexes.buf[s->start].position;
-                        end   = state.storage.vertexes.buf[s->end].position;
+                        start = state.storage.vertexes.buf[s->start];
+                        end   = state.storage.vertexes.buf[s->end];
 
                         DrawLineV( start, end, color );
                     }
@@ -637,7 +659,7 @@ int main() {
                         if( state.build.previous_index >= 0 ) {
                             Vector2 prev =
                                 state.storage.vertexes.buf
-                                    [state.build.previous_index].position;
+                                    [state.build.previous_index];
                             DrawLineV( prev, world_mouse, WHITE );
                         }
                     } break;
@@ -645,8 +667,8 @@ int main() {
                     case Mode::COUNT: break;
                     case Mode::SELECT: {
                         switch( state.selection.type ) {
-                            case NONE:    break;
-                            case OBJECT: {
+                            case SelectionType::NONE:    break;
+                            case SelectionType::OBJECT: {
                                 Rectangle rect = {};
                                 auto* obj = state.selection.object;
                                 ObjectShapeDescription shape = object_shape( obj->type );
@@ -688,10 +710,10 @@ int main() {
 
                                 DrawRectangleLinesRec( rect, GREEN );
                             } break;
-                            case VERTEX: {
+                            case SelectionType::VERTEX: {
                                 Rectangle rect = {
-                                    state.selection.vertex->position.x,
-                                    state.selection.vertex->position.y,
+                                    state.selection.vertex->x,
+                                    state.selection.vertex->y,
                                     VERTEX_RADIUS + 0.2,
                                     VERTEX_RADIUS + 0.2,
                                 };
@@ -700,32 +722,15 @@ int main() {
 
                                 DrawRectangleLinesRec( rect, GREEN );
                             } break;
-                            case SEGMENT: {
+                            case SelectionType::SEGMENT: {
                                 Vector2 start =
-                                    state.storage.vertexes.buf[state.selection.segment->start]
-                                        .position;
+                                    state.storage.vertexes.buf[state.selection.segment->start];
                                 Vector2 end =
-                                    state.storage.vertexes.buf[state.selection.segment->end]
-                                        .position;
+                                    state.storage.vertexes.buf[state.selection.segment->end];
                                 DrawLineV( start, end, GREEN );
                             } break;
                         }
                     } break;
-                }
-
-                /* Draw level mesh */ {
-                    auto* t = &state.triangle_indexes;
-                    auto* v = &state.triangle_positions;
-                    for( int i = 0; i < t->len; i += 3 ) {
-                        int i0 = t->buf[i + 0];
-                        int i1 = t->buf[i + 1];
-                        int i2 = t->buf[i + 2];
-                        Vector2 p0 = { v->buf[i0].x, v->buf[i0].z };
-                        Vector2 p1 = { v->buf[i1].x, v->buf[i1].z };
-                        Vector2 p2 = { v->buf[i2].x, v->buf[i2].z };
-
-                        DrawTriangle( p0, p1, p2, ColorAlpha( WHITE, 0.2 ) );
-                    }
                 }
 
             } EndMode2D();
@@ -756,7 +761,38 @@ int main() {
             rt.texture, { 0, 0, draw_area.x, -draw_area.y },
             map_area, {}, 0.0, WHITE );
 
-        /* Draw GUI */ {
+        /* Draw GUI */
+        Rectangle top_bar = {
+            0, 0,
+            (float)scr_width,
+            TOP_PANEL_HEIGHT
+        };
+        DrawRectangleRec( top_bar, GetColor( GuiGetStyle( DEFAULT, BACKGROUND_COLOR ) ) ); {
+            Rectangle button = top_bar;
+            button.width /= 10.0;
+            button.height -= 10.0;
+            button.x += GUI_GUTTER;
+            button.y += 6.0;
+
+            if( GuiButton( button, "Load Map" ) ) {
+                state.file_mode = FileMode::LOADING;
+            }
+
+            button.x += button.width + GUI_GUTTER;
+
+            if( GuiButton( button, "Save Map" ) ) {
+                state.file_mode = FileMode::SAVING;
+            }
+        }
+
+        Rectangle side_bar = {
+            (float)scr_width - SIDE_PANEL_WIDTH,
+            top_bar.height,
+            SIDE_PANEL_WIDTH,
+            scr_height - top_bar.height
+        };
+        GuiPanel( side_bar, "Inspector" );
+        if( state.file_mode == FileMode::NONE ) {
 
             Vector2 mode_name_position = *(Vector2*)&map_area;
             mode_name_position.x += GUI_GUTTER;
@@ -796,32 +832,6 @@ int main() {
                 map_area.y + (map_area.height - (mode_description_size.y + GUI_GUTTER)) };
             DrawTextEx( font, mode_description( state.mode ), mode_description_position, FONT_SIZE, 1.0, GetColor( GuiGetStyle( DEFAULT, TEXT_COLOR_NORMAL )) );
 
-            Rectangle top_bar = {
-                0, 0,
-                (float)scr_width,
-                TOP_PANEL_HEIGHT
-            };
-            DrawRectangleRec( top_bar, GetColor( GuiGetStyle( DEFAULT, BACKGROUND_COLOR ) ) ); {
-                Rectangle button = top_bar;
-                button.width /= 10.0;
-                button.height -= 10.0;
-                button.x += GUI_GUTTER;
-                button.y += 6.0;
-
-                GuiButton( button, "Load Map" );
-
-                button.x += button.width + GUI_GUTTER;
-
-                GuiButton( button, "Save Map" );
-            }
-
-            Rectangle side_bar = {
-                (float)scr_width - SIDE_PANEL_WIDTH,
-                top_bar.height,
-                SIDE_PANEL_WIDTH,
-                scr_height - top_bar.height
-            };
-            GuiPanel( side_bar, "Inspector" );
             if( state.mode == Mode::SELECT ) {
                 side_bar.x      += 10.0;
                 side_bar.y      += 10.0 + TOP_PANEL_HEIGHT;
@@ -896,7 +906,7 @@ int main() {
                             GuiSlider(
                                 input_area, TextFormat( "%.2f rad", state.selection.object->rotation ),
                                 "", &state.selection.object->rotation,
-                                -(M_PI * 2.0f), (M_PI * 2.0f) );
+                                0.0f, (M_PI * 2.0f) );
                         }
 
                         setting.y += setting.height + GUI_GUTTER;
@@ -921,10 +931,10 @@ int main() {
 
                         snprintf(
                             state.inspector.vertex.position.x_buf, 32,
-                            "%f", state.selection.vertex->position.x );
+                            "%f", state.selection.vertex->x );
                         snprintf(
                             state.inspector.vertex.position.y_buf, 32,
-                            "%f", state.selection.vertex->position.y );
+                            "%f", state.selection.vertex->y );
 
                         if( state.inspector.is_dirty ) {
                             state.inspector.is_dirty = false;
@@ -947,7 +957,7 @@ int main() {
 
                             if( GuiValueBoxFloat(
                                 x_input, "", state.inspector.vertex.position.x_buf,
-                                &state.selection.vertex->position.x,
+                                &state.selection.vertex->x,
                                 state.inspector.vertex.position.x_edit
                             ) ) {
                                 state.inspector.vertex.position.x_edit =
@@ -959,7 +969,7 @@ int main() {
 
                             if( GuiValueBoxFloat(
                                 y_input, "", state.inspector.vertex.position.y_buf,
-                                &state.selection.vertex->position.y,
+                                &state.selection.vertex->y,
                                 state.inspector.vertex.position.y_edit
                             ) ) {
                                 state.inspector.vertex.position.y_edit =
@@ -1078,30 +1088,47 @@ int main() {
 
                         check_box.x     += check_box.width - (check_box.height + GUI_GUTTER);
                         check_box.width  = check_box.height;
-
-                        GuiLabel( setting, "Flip Normal" );
-
-                        bool active = state.selection.segment->is_flipped_normal;
-                        if( GuiCheckBox( check_box, "", &active ) ) {
-                            state.selection.segment->is_flipped_normal = active;
-                        }
-
-                        setting.y += setting.height + GUI_GUTTER;
-                        check_box = setting;
-
-                        check_box.x     += check_box.width - (check_box.height + GUI_GUTTER);
-                        check_box.width  = check_box.height;
-
-                        GuiLabel( setting, "Is Solid" );
-
-                        active = state.selection.segment->is_solid;
-                        if( GuiCheckBox( check_box, "", &active ) ) {
-                            state.selection.segment->is_solid = active;
-                        }
                     } break;
                 }
 
             }
+        } else if( state.file_mode == FileMode::SAVING ) {
+            auto* diag = &state.file_dialog_state;
+            diag->windowActive = true;
+            diag->saveFileMode = true;
+            GuiWindowFileDialog( diag );
+
+            if( diag->SelectFilePressed ) {
+                state.file_mode    = FileMode::NONE;
+                diag->windowActive = false;
+                if( diag->fileNameText[0] ) {
+                    save_map( state, TextFormat( "%s/%s", diag->dirPathText, diag->fileNameText ) );
+                }
+                memset( diag->fileNameText, 0, sizeof(diag->fileNameText) );
+            } else if( diag->CancelFilePressed || !diag->windowActive ) {
+                state.file_mode    = FileMode::NONE;
+                diag->windowActive = false;
+            }
+
+        } else {
+            auto* diag = &state.file_dialog_state;
+            diag->windowActive = true;
+            diag->saveFileMode = false;
+            GuiWindowFileDialog( diag );
+
+            if( diag->SelectFilePressed ) {
+                state.file_mode    = FileMode::NONE;
+                diag->windowActive = false;
+                if( diag->fileNameText[0] ) {
+                    load_map(
+                        state, TextFormat( "%s/%s", diag->dirPathText, diag->fileNameText ) );
+                }
+                memset( diag->fileNameText, 0, sizeof(diag->fileNameText) );
+            } else if( diag->CancelFilePressed || !diag->windowActive ) {
+                state.file_mode    = FileMode::NONE;
+                diag->windowActive = false;
+            }
+
         }
 
         EndDrawing();
@@ -1109,6 +1136,113 @@ int main() {
 
     CloseWindow();
     return 0;
+}
+void save_map( State& state, const char* p ) {
+    const char* file_path = p;
+    if( !strstr( file_path, MAP_EXT ) ) {
+        file_path = TextFormat( "%s" MAP_EXT, file_path );
+    }
+
+    auto* st = &state.storage;
+
+    uint32_t size = sizeof(MapFileHeader) +
+        (sizeof(MapFileObject) * st->objects.len) +
+        (sizeof(MapFileSegment) * st->segments.len) +
+        (sizeof(Vector2) * st->vertexes.len);
+    MapFileHeader* header = (MapFileHeader*)calloc( 1, size );
+    memcpy( header, MAP_IDENTIFIER, 4 );
+    header->total_size    = size;
+    header->object_count  = st->objects.len;
+    header->vertex_count  = st->vertexes.len;
+    header->segment_count = st->segments.len;
+
+    MapFileObject*  obj  = (MapFileObject*)(header + 1);
+    Vector2*        vert = (Vector2*)(obj + header->object_count);
+    MapFileSegment* seg  = (MapFileSegment*)(vert + header->vertex_count);
+
+    for( int i = 0; i < st->objects.len; ++i ) {
+        auto* o = st->objects.buf + i;
+        obj[i] = MapFileObject{
+            o->position,
+            o->type,
+            (uint16_t)((o->rotation / (M_PI * 2.0f)) * UINT16_MAX)
+        };
+    }
+
+    memcpy( vert, st->vertexes.buf, sizeof(Vector2) * st->vertexes.len );
+
+    for( int i = 0; i < st->segments.len; ++i ) {
+        auto* s = st->segments.buf + i;
+        seg[i] = MapFileSegment{ (uint16_t)s->start, (uint16_t)s->end };
+    }
+
+    if( SaveFileData( file_path, header, size ) ) {
+        TraceLog( LOG_INFO, "Saved %s!", file_path );
+    } else {
+        TraceLog( LOG_ERROR, "Failed to save %s!", file_path );
+    }
+
+    free( header );
+}
+void load_map( State& state, const char* path ) {
+    int size = 0;
+    unsigned char* data = LoadFileData( path, &size );
+    if( !data ) {
+        TraceLog( LOG_ERROR, "Failed to load %s!", path );
+    }
+    MapFileHeader* header = (MapFileHeader*)data;
+    if(
+        ( size < (int)sizeof(*header) ) ||
+        ( memcmp( header->identifier, MAP_IDENTIFIER, 4 ) != 0 ) ||
+        ( size != (int)header->total_size )
+    ) {
+        TraceLog( LOG_ERROR, "%s is an invalid file!", path );
+        UnloadFileData( data );
+        return;
+    }
+
+    auto* st = &state.storage;
+    st->objects.len  = 0;
+    st->segments.len = 0;
+    st->vertexes.len = 0;
+
+    MapFileObject*  obj  = (MapFileObject*)(header + 1);
+    Vector2*        vert = (Vector2*)(obj + header->object_count);
+    MapFileSegment* seg  = (MapFileSegment*)(vert + header->vertex_count);
+
+    if( st->objects.cap < header->object_count) {
+        st->objects.buf = (EdObject*)realloc(
+            st->objects.buf, sizeof(EdObject) * header->object_count );
+    }
+    if( st->vertexes.cap < header->vertex_count ) {
+        st->vertexes.buf = (Vector2*)realloc(
+            st->vertexes.buf, sizeof(Vector2) * header->vertex_count );
+    }
+    if( st->segments.cap < header->segment_count ) {
+        st->segments.buf = (EdSegment*)realloc(
+            st->segments.buf, sizeof(EdSegment) * header->segment_count );
+    }
+
+    for( uint16_t i = 0; i < header->object_count; ++i ) {
+        EdObject o = {};
+        o.position = obj[i].position;
+        o.type     = obj[i].type;
+        o.rotation = (((float)obj[i].rotation) / (float)UINT16_MAX) * (M_PI * 2.0f);
+        buf_append( &st->objects, o );
+    }
+
+    memcpy( st->vertexes.buf, vert, sizeof(Vector2) * header->vertex_count );
+    st->vertexes.len = header->vertex_count;
+
+    for( uint16_t i = 0; i < header->segment_count; ++i ) {
+        EdSegment s = {};
+        s.start = seg[i].start;
+        s.end   = seg[i].end;
+        s.tint  = WHITE;
+        buf_append( &st->segments, s );
+    }
+    UnloadFileData( data );
+    TraceLog( LOG_INFO, "Loaded %s!", path );
 }
 void set_mode( State& state, Mode new_mode ) {
     state.mode = new_mode;
@@ -1127,138 +1261,7 @@ void set_mode( State& state, Mode new_mode ) {
         case Mode::COUNT:  break;
     }
 }
-struct PositionAndCenter {
-    Vector3 p;
-    Vector3 center;
-};
-float cross_product( Vector3 a, Vector3 b, Vector3 c ) {
-    return (b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x);
-}
-bool point_in_triangle( Vector3 p, Vector3 a, Vector3 b, Vector3 c ) {
-    Vector3 v0 = { c.x - a.x, 0, c.z - a.z };
-    Vector3 v1 = { b.x - a.x, 0, b.z - a.z };
-    Vector3 v2 = { p.x - a.x, 0, p.z - a.z };
 
-    float dot00 = v0.x * v0.x + v0.y * v0.y;
-    float dot01 = v0.x * v1.x + v0.y * v1.y;
-    float dot02 = v0.x * v2.x + v0.y * v2.y;
-    float dot11 = v1.x * v1.x + v1.y * v1.y;
-    float dot12 = v1.x * v2.x + v1.y * v2.y;
-
-    float denom = dot00 * dot11 - dot01 * dot01;
-    if( !denom ) {
-        return false;
-    }
-
-    float inv_denom = 1.0 / denom;
-    float u = (dot11 * dot02 - dot01 * dot12) * inv_denom;
-    float v = (dot00 * dot12 - dot01 * dot02) * inv_denom;
-
-    return (u >= 0) && (v >= 0) && (u + v <= 1);
-}
-bool is_ear(
-    int previous, int current, int next,
-    VertexBuffer* pos, IndexBuffer* idx, int count
-) {
-    Vector3 a = pos->buf[idx->buf[previous]];
-    Vector3 b = pos->buf[idx->buf[current]];
-    Vector3 c = pos->buf[idx->buf[next]];
-
-    if( cross_product( a, b, c ) <= 0 ) {
-        return false;
-    }
-
-    for( int i = 0; i < count; ++i ) {
-        if( i == previous || i == current || i == next ) {
-            continue;
-        }
-        Vector3 point = pos->buf[idx->buf[i]];
-
-        if( point_in_triangle( point, a, b, c ) ) {
-            return false;
-        }
-    }
-
-    return true;
-}
-Vector3 center = {};
-extern "C"
-int v3_cmp_qsort( const void* vp1, const void* vp2 ) {
-    Vector3 c  = center;
-    Vector3 v1 = *(Vector3*)vp1;
-    Vector3 v2 = *(Vector3*)vp2;
-
-    float angle_v1 = atan2( v1.z - c.z, v1.x - c.x );
-    float angle_v2 = atan2( v2.z - c.z, v2.x - c.x );
-
-    int result = angle_v1 == angle_v2 ? 0 : angle_v1 > angle_v2 ? 1 : -1;
-
-    TraceLog( LOG_INFO, "%f, %f -> %i", angle_v1, angle_v2, result );
-    return result;
-}
-bool triangulate( State& state ) {
-    if( !state.triangles_dirty || !state.storage.vertexes.len ) {
-        return false;
-    }
-    state.triangles_dirty = false;
-
-    auto* v   = &state.storage.vertexes;
-    auto* pos = &state.triangle_positions;
-    auto* idx = &state.triangle_indexes;
-
-    pos->len = idx->len = 0;
-
-    for( int i = 0; i < v->len; ++i ) {
-        auto* vertex = v->buf + i;
-        buf_append( pos, v3( vertex->position.x, 0.0, vertex->position.y ) );
-    }
-    // NOTE(alicia): sort into CCW
-    center = {};
-    for( int i = 0; i < pos->len; ++i ) {
-        center += pos->buf[i];
-    }
-    center /= (float)pos->len;
-    qsort( pos->buf, pos->len, sizeof(Vector3), v3_cmp_qsort );
-
-    IndexBuffer idx2 = {};
-    for( int i = 0; i < pos->len; ++i ) {
-        buf_append( &idx2, i );
-    }
-
-    int rem = pos->len;
-    while( rem > 3 ) {
-        bool ear_found = false;
-
-        for( int i = 0; i < rem; ++i ) {
-            int previous = ( i - 1 + rem ) % rem;
-            int current  = i;
-            int next     = ( i + 1 ) % rem;
-
-            if( is_ear( previous, current, next, pos, &idx2, rem ) ) {
-                buf_append( idx, idx2.buf[current] );
-                buf_append( idx, idx2.buf[previous] );
-                buf_append( idx, idx2.buf[next] );
-
-                for( int j = current; j < (rem - 1); ++j ) {
-                    idx2.buf[j] = idx2.buf[j + 1];
-                }
-                rem--;
-
-                ear_found = true;
-                break;
-            }
-        }
-
-        unused(ear_found);
-    }
-
-    buf_append( idx, idx2.buf[1] );
-    buf_append( idx, idx2.buf[0] );
-    buf_append( idx, idx2.buf[2] );
-
-    free( idx2.buf );
-    return true;
-}
 void hover_items(
     State& state, Vector2 mouse_world_position
 ) {
@@ -1313,7 +1316,7 @@ void hover_items(
     for( int i = 0; i < state.storage.vertexes.len; ++i ) {
         auto* v = state.storage.vertexes.buf + i;
         bool is_hovering = CheckCollisionPointCircle(
-            mouse_world_position, v->position, VERTEX_RADIUS );
+            mouse_world_position, *v, VERTEX_RADIUS );
 
         if( is_hovering ) {
             buf_append( &state.hover.vertex_indexes, i );
@@ -1323,8 +1326,8 @@ void hover_items(
 
     for( int i = 0; i < state.storage.segments.len; ++i ) {
         auto* s = state.storage.segments.buf + i;
-        Vector2 start = state.storage.vertexes.buf[s->start].position;
-        Vector2 end   = state.storage.vertexes.buf[s->end].position;
+        Vector2 start = state.storage.vertexes.buf[s->start];
+        Vector2 end   = state.storage.vertexes.buf[s->end];
 
         bool is_hovering = CheckCollisionCircleLine( mouse_world_position, 0.05, start, end );
 
@@ -1334,7 +1337,6 @@ void hover_items(
         }
     }
 }
-
 const char* collate_modes() {
     struct {
         char* buf;
@@ -1425,6 +1427,7 @@ int mode_key( Mode mode ) {
     return KEY_NULL;
 }
 
+
 __attribute__((hot)) __attribute__((always_inline)) inline
 void _0_( int v, ... ) {
     (void)v;
@@ -1437,6 +1440,12 @@ void DrawRectangleLinesRec( Rectangle rect, Color color ) {
     DrawLineV( pos + Vector2{ size.x, size.y }, pos + Vector2{ 0, size.y }, color );
     DrawLineV( pos + Vector2{ 0, size.y }, pos, color );
 }
+Vector2 round( Vector2 v ) {
+    return {
+        round( v.x ),
+        round( v.y )
+    };
+}
 
 // Thank you GCC
 #pragma GCC diagnostic push
@@ -1448,6 +1457,9 @@ void DrawRectangleLinesRec( Rectangle rect, Color color ) {
 #define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
 #undef RAYGUI_IMPLEMENTATION
+
+#define GUI_WINDOW_FILE_DIALOG_IMPLEMENTATION
+#include "../raygui/examples/custom_file_dialog/gui_window_file_dialog.h"
 
 #pragma GCC diagnostic pop
 

@@ -13,14 +13,20 @@
 #define readonly() static const constexpr
 
 readonly() float E_IDLE_TIME   = 1.0;
+readonly() float E_SCAN_TIME   = 1.0;
 readonly() float E_WANDER_TIME = 1.5;
+readonly() float E_ALERT_TIME  = 0.5;
+
+readonly() float E_SIGHT_RANGE = 10.0;
 
 readonly() float E_WANDER_MAX_VELOCITY = 8.0;
-readonly() float E_CHASE_MAX_VELOCITY  = 25.0;
+readonly() float E_CHASE_MAX_VELOCITY  = 20.0;
 
 readonly() float E_RETURN_HOME_DISTANCE = 0.1;
 
 readonly() float E_DEFAULT_RADIUS = 15.0;
+
+readonly() float E_ACCELERATION = 25.0f;
 
 enum class EnemyState {
     IDLE,
@@ -46,8 +52,11 @@ struct Enemy {
 
     union {
         struct {
-            Vector3 target;
+            Vector3 direction;
         } wander;
+        struct {
+            Vector3 target;
+        } chase;
     };
 
     inline
@@ -84,6 +93,7 @@ const char* to_string( EnemyState state ) {
         case EnemyState::CHASING:     return "Chase";
         case EnemyState::RETURN_HOME: return "Returning Home";
     }
+    return "";
 }
 
 #endif /* header guard */

@@ -457,8 +457,8 @@ int mode_editor( struct Args* args ) {
 
     command_builder_append(
         &builder, "editor/main.cpp", "-Iinclude",
-        "-Iraylib/src", "-Iraygui/src", "-Wall",
-        "-O0" );
+        "-Iraylib/src", "-Iraygui/src",
+        "-Wall", "-O0" );
     switch( build->target ) {
         case T_GNU_LINUX: {
             make_dirs( "build", "build/linux" );

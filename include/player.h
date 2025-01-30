@@ -15,7 +15,7 @@ readonly() float MAX_RUN_VELOCITY  = 25.0;
 
 readonly() float STOP_DRAG         = 10.0;
 readonly() float TURN_SPEED        = 16.0;
-readonly() float CAMERA_DISTANCE   = 5.5;
+readonly() float CAMERA_DISTANCE   = 5.8;
 readonly() float CAMERA_HEIGHT     = 2.0;
 readonly() Vector3 CAMERA_TARGET_OFFSET = { 0.0, 1.25, 0.0 };
 
