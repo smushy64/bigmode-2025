@@ -58,7 +58,8 @@
     "-sTOTAL_MEMORY=" macro_value_to_string(TOTAL_MEMORY), \
     "--preload-file", "resources", \
     "-o", "build/web/" WEB_EXE ".html", "-DPLATFORM_WEB", \
-    "-sERROR_ON_UNDEFINED_SYMBOLS=0"
+    "-sERROR_ON_UNDEFINED_SYMBOLS=0", \
+    "-sEXPORTED_RUNTIME_METHODS=ccall"
 
 #if defined(PLATFORM_WINDOWS)
     #define EXE_EXT ".exe"
@@ -88,6 +89,7 @@ enum Mode {
     M_RUN,
     M_PACKAGE,
     M_EDITOR,
+    M_TEST,
 
     M_COUNT
 };
@@ -121,6 +123,7 @@ int mode_build( struct Args* args );
 int mode_run( struct Args* args );
 int mode_package( struct Args* args );
 int mode_editor( struct Args* args );
+int mode_test( struct Args* args );
 
 bool __make_dirs( const char* first, ... );
 #define make_dirs( ... ) __make_dirs( __VA_ARGS__, NULL )
@@ -202,6 +205,7 @@ int main( int argc, const char** argv ) {
         case M_RUN:     return mode_run( &args );
         case M_PACKAGE: return mode_package( &args );
         case M_EDITOR:  return mode_editor( &args );
+        case M_TEST:    return mode_test( &args );
         case M_COUNT:   return 1;
     }
 
@@ -505,6 +509,17 @@ int mode_editor( struct Args* args ) {
 
     return __quick_cmd( cmd );
 }
+int mode_test( struct Args* args ) {
+    make_dirs( "build", "build/linux" );
+
+    quick_cmd(
+        "gcc", "test/main.cpp", "-o", "build/linux/quick-test",
+        "-Iraylib/src", "-Lvendor/linux", "-l:libraylib.a",
+        "-lGL", "-lm", "-lpthread", "-ldl", "-lrt", "-lX11", "-static-libgcc" );
+
+    quick_cmd( "build/linux/quick-test" );
+    return 0;
+}
 
 int build_linux( const char* cpp, struct Build* build ) {
     make_dirs( "build", "build/linux" );
@@ -760,6 +775,7 @@ int mode_help( struct Args* args ) {
             printf( "  -optimized        Optimize with -O2 rather than -O0\n" );
             printf( "  -strip-symbols    Strip debug symbols.\n" );
         } break;
+        case M_TEST:
         case M_PACKAGE:
         case M_EDITOR:
         case M_COUNT:   break;
@@ -774,6 +790,7 @@ String mode_description( enum Mode mode ) {
         case M_RUN:     return string_text("Compile and run (native only).");
         case M_PACKAGE: return string_text("Compile in Release mode and package for each platform (Windows,Linux and Web)");
         case M_EDITOR:  return string_text("Compile and run editor (native only).");
+        case M_TEST:    return string_text("Compile and run quick test (linux only).");
         case M_COUNT: unreachable();
     }
 }
@@ -784,6 +801,7 @@ String mode_to_string( enum Mode mode ) {
         case M_RUN:     return string_text("run");
         case M_PACKAGE: return string_text("package");
         case M_EDITOR:  return string_text("editor");
+        case M_TEST:    return string_text("test");
         case M_COUNT: unreachable();
     }
 }
