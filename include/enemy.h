@@ -12,21 +12,32 @@
 
 #define readonly() static const constexpr
 
-readonly() float E_IDLE_TIME   = 1.0;
-readonly() float E_SCAN_TIME   = 1.0;
-readonly() float E_WANDER_TIME = 1.5;
-readonly() float E_ALERT_TIME  = 0.5;
+readonly() float E_IDLE_TIME          = 1.0;
+readonly() float E_SCAN_TIME          = 0.8;
+readonly() float E_WANDER_TIME        = 1.5;
+readonly() float E_ALERT_TIME         = 0.5;
+readonly() float E_ATTACK_TIME        = 0.61;
+readonly() float E_TAKING_DAMAGE_TIME = 0.3;
+readonly() float E_DYING_TIME         = 1.316;
+
+readonly() float E_SFX_RUN_TIME  = 0.2;
+readonly() float E_SFX_WALK_TIME = 0.5;
 
 readonly() float E_SIGHT_RANGE = 10.0;
 
-readonly() float E_WANDER_MAX_VELOCITY = 8.0;
-readonly() float E_CHASE_MAX_VELOCITY  = 20.0;
+readonly() float E_WANDER_MAX_VELOCITY = 5.0;
+readonly() float E_CHASE_MAX_VELOCITY  = 10.0;
 
 readonly() float E_RETURN_HOME_DISTANCE = 0.1;
 
 readonly() float E_DEFAULT_RADIUS = 15.0;
 
-readonly() float E_ACCELERATION = 25.0f;
+readonly() float E_ACCELERATION       = 25.0f;
+readonly() float E_CHASE_ACCELERATION = 100.0f;
+
+readonly() float E_ATTACK_POWER = 20.0;
+readonly() float E_ATTACK_PUSH  = 20.0;
+
 
 enum class EnemyState {
     IDLE,
@@ -34,7 +45,10 @@ enum class EnemyState {
     WANDER,
     ALERT,
     CHASING,
+    ATTACKING,
     RETURN_HOME,
+    TAKING_DAMAGE,
+    DYING,
 };
 const char* to_string( EnemyState state );
 
@@ -49,6 +63,11 @@ struct Enemy {
     float      power;
     float      timer;
     bool       first_frame_state;
+
+    int   animation_frame;
+    float animation_timer;
+
+    float sfx_timer;
 
     union {
         struct {
@@ -86,12 +105,15 @@ struct Enemy {
 inline
 const char* to_string( EnemyState state ) {
     switch( state ) {
-        case EnemyState::IDLE:        return "Idle";
-        case EnemyState::SCAN:        return "Scan";
-        case EnemyState::WANDER:      return "Wander";
-        case EnemyState::ALERT:       return "Alert";
-        case EnemyState::CHASING:     return "Chase";
-        case EnemyState::RETURN_HOME: return "Returning Home";
+        case EnemyState::IDLE:          return "Idle";
+        case EnemyState::SCAN:          return "Scan";
+        case EnemyState::WANDER:        return "Wander";
+        case EnemyState::ALERT:         return "Alert";
+        case EnemyState::CHASING:       return "Chase";
+        case EnemyState::ATTACKING:     return "Attacking";
+        case EnemyState::TAKING_DAMAGE: return "Taking Damage";
+        case EnemyState::DYING:         return "Dying";
+        case EnemyState::RETURN_HOME:   return "Returning Home";
     }
     return "";
 }

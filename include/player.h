@@ -7,33 +7,45 @@
  * @date   January 24, 2025
 */
 #include "raylib.h"
+#include <math.h>
 
 #define readonly() static const constexpr
 
-readonly() float MAX_WALK_VELOCITY = 15.0;
+readonly() float ANIMATION_TIME = 1.0 / 60.0;
+
+readonly() float   CAMERA_MIN_ROTATION = -15 * ( M_PI / 180.0 );
+readonly() float   CAMERA_MAX_ROTATION =  60 * ( M_PI / 180.0 );
+readonly() float   CAMERA_DISTANCE   = 6.0;
+readonly() float   CAMERA_HEIGHT     = 2.0;
+readonly() Vector3 CAMERA_TARGET_OFFSET = { 0.0, 1.35, 0.0 };
+
+readonly() float PLAYER_COLLISION_RADIUS   = 1.0;
+readonly() float PLAYER_COLLISION_RADIUS_2 = PLAYER_COLLISION_RADIUS * 2.0;
+
+readonly() float MAX_WALK_VELOCITY = 12.0;
 readonly() float MAX_RUN_VELOCITY  = 25.0;
 
 readonly() float STOP_DRAG         = 10.0;
-readonly() float TURN_SPEED        = 16.0;
-readonly() float CAMERA_DISTANCE   = 5.8;
-readonly() float CAMERA_HEIGHT     = 2.0;
-readonly() Vector3 CAMERA_TARGET_OFFSET = { 0.0, 1.25, 0.0 };
+readonly() float TURN_SPEED        = 30.0;
 
 readonly() float START_MAX_POWER         = 200.0;
 readonly() float POWER_LOSS_RATE         = 1.2;
 readonly() float POWER_LOSS_IDLE_MULT    = 0.2;
 readonly() float POWER_LOSS_RUNNING_MULT = 2.0;
 
-readonly() float POWER_LOSS_PUNCH = 12.0;
-readonly() float POWER_LOSS_KICK  = 18.0;
-readonly() float POWER_LOSS_DODGE = 30.0;
+readonly() float POWER_LOSS_ATTACK = 12.0;
+readonly() float POWER_LOSS_DODGE  = 30.0;
 
-readonly() float DODGE_TIME  = 0.24;
-readonly() float DODGE_SPEED = 30.0;
+readonly() float DODGE_TIME  = 0.45;
+readonly() float DODGE_SPEED = 15.0;
 
 readonly() float DODGE_COOLDOWN_TIME = DODGE_TIME + 0.2;
 
-readonly() float DAMAGE_IMPULSE_FORCE = 20.0;
+readonly() float TAKING_DAMAGE_TIME = 0.3;
+
+readonly() float ATTACK_TIME = 0.61;
+
+readonly() float ATTACK_DAMAGE = 25.0;
 
 struct Input {
     Vector2 camera;
@@ -44,6 +56,8 @@ struct Input {
     bool is_punch_press;
     bool is_kick_press;
     bool is_dodge_press;
+
+    bool is_using_gamepad;
 };
 
 enum class PlayerState {
@@ -51,8 +65,7 @@ enum class PlayerState {
     
     IS_MOVING,
 
-    ATTACK_PUNCH,
-    ATTACK_KICK,
+    ATTACK,
     DODGE,
 
     TAKING_DAMAGE,
@@ -76,10 +89,15 @@ struct Player {
     float max_power;
 
     float inv_time;
+    float attack_timer;
+    bool  which_attack;
 
     float dodge_cooldown_timer;
     float sfx_walk_timer;
     float sfx_walk_time;
+
+    float animation_timer;
+    int   animation_frame;
 };
 
 #undef readonly

@@ -22,6 +22,9 @@ struct SoundBuffer {
     int    cap;
 };
 
+struct Segment {
+    int start, end;
+};
 struct GlobalState {
     Mode          mode;
     float         timer;
@@ -51,20 +54,42 @@ struct GlobalState {
             Camera3D     camera;
             Player       player;
 
-            Model player_model;
-
             struct {
+                Model player;
+                Model wall;
+            } models;
+            struct {
+                Texture test;
                 Texture white;
             } textures;
+
+            struct {
+                ModelAnimation* buf;
+                int             len;
+            } player_animation;
+
             struct {
                 SoundBuffer step;
                 SoundBuffer dash;
+                SoundBuffer whiff;
+                SoundBuffer punch;
             } sounds;
+
             struct {
                 Object* buf;
                 int     len;
                 int     cap;
             } objects;
+            struct {
+                Vector2* buf;
+                int      len;
+                int      cap;
+            } vertexes;
+            struct {
+                Segment* buf;
+                int      len;
+                int      cap;
+            } segments;
         } game;
     } transient;
 };

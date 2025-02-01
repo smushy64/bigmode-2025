@@ -8,8 +8,8 @@
 */
 #include "raylib.h"
 
-void play_sfx( Sound sound );
-int  play_sfx_random( Sound* buf, int len );
+void play_sfx( Vector2 src, Vector2 listener, Sound sound );
+int  play_sfx_random( Vector2 src, Vector2 listener, Sound* buf, int len );
 
 float sound_length( const Sound& sound );
 

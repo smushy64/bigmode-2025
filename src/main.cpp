@@ -34,9 +34,25 @@ void game_exit() {
 #endif
 }
 
+const char* INITIAL_MAP = "resources/maps/level_00.map";
+
+#if defined(PLATFORM_WEB)
 int main() {
-#if !defined(PLATFORM_WEB)
+#else
+int main( int argc, char** argv ) {
     SetConfigFlags( FLAG_VSYNC_HINT );
+
+    for( int i = 1; i < argc; ++i ) {
+        const char* arg = argv[i];
+        int arg_len = strlen( arg );
+        if(
+            arg_len >= sizeof("--load") &&
+            memcmp( arg, "--load=", sizeof("--load") ) == 0
+        ) {
+            INITIAL_MAP = arg + sizeof("--load");
+            break;
+        }
+    }
 #endif
     InitWindow( WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_NAME );
     InitAudioDevice();
@@ -55,6 +71,7 @@ int main() {
             break;
         }
     }
+
 #endif
 
     CloseAudioDevice();

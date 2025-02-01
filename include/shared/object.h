@@ -53,7 +53,7 @@ struct Object {
         result.enemy.state  = EnemyState::IDLE;
         result.enemy.home   = position;
         result.enemy.radius = radius;
-        result.enemy.power  = 200.0f;
+        result.enemy.power  = 100.0f;
         result.enemy.facing_direction =
             Vector3RotateByAxisAngle( Vector3UnitX, Vector3UnitY, rotation );
         return result;

@@ -128,6 +128,14 @@ struct State {
     FileMode file_mode;
     GuiWindowFileDialogState file_dialog_state;
 
+    struct {
+        char* buf;
+        int   len;
+        int   cap;
+
+        bool dirty;
+    } path;
+
     union {
         Selection selection;
 
@@ -237,6 +245,11 @@ int main() {
     while( !WindowShouldClose() ) {
         float dt = GetFrameTime();
 
+        if( state.path.buf && state.path.dirty ) {
+            SetWindowTitle( TextFormat( "BIGMODE Game Jam 2025 - Editor - %s", state.path.buf ) );
+            state.path.dirty = false;
+        }
+
         bool    lmb         = IsMouseButtonDown( MOUSE_LEFT_BUTTON );
         bool    rmb         = IsMouseButtonDown( MOUSE_RIGHT_BUTTON );
         bool    mmb         = IsMouseButtonDown( MOUSE_MIDDLE_BUTTON );
@@ -288,7 +301,6 @@ int main() {
         last_world_mouse = world_mouse;
 
         if( !lmb ) {
-            state.hover.clear();
             hover_items( state, world_mouse );
         }
 
@@ -388,15 +400,18 @@ int main() {
                             auto* buf     = &state.storage.objects;
 
                             if( indexes->len ) {
-                                int idx     = indexes->buf[indexes->len - 1];
-                                int obj_idx = indexes->buf[idx];
+                                int idx = indexes->buf[0];
 
-                                auto* obj = buf->buf + obj_idx;
-                                TraceLog(
-                                    LOG_INFO, "Removing %s @ { %f, %f }",
-                                    to_string( obj->type ), obj->position.x, obj->position.y );
+                                if( idx >= 0 && idx < buf->len ) {
+                                    auto* obj = buf->buf + idx;
+                                    TraceLog(
+                                        LOG_INFO, "Removing %s[%i] @ { %f, %f }",
+                                        to_string( obj->type ), idx,
+                                        obj->position.x, obj->position.y );
 
-                                buf->buf[obj_idx] = buf->buf[--state.storage.objects.len];
+                                    buf->buf[idx]   = buf->buf[--state.storage.objects.len];
+                                    indexes->buf[0] = indexes->buf[--indexes->len];
+                                }
                             }
                         }
                     }
@@ -769,19 +784,42 @@ int main() {
         };
         DrawRectangleRec( top_bar, GetColor( GuiGetStyle( DEFAULT, BACKGROUND_COLOR ) ) ); {
             Rectangle button = top_bar;
-            button.width /= 10.0;
+            button.width  /= 15.0;
             button.height -= 10.0;
             button.x += GUI_GUTTER;
             button.y += 6.0;
 
-            if( GuiButton( button, "Load Map" ) ) {
+            if( GuiButton( button, "Load" ) ) {
                 state.file_mode = FileMode::LOADING;
             }
 
             button.x += button.width + GUI_GUTTER;
 
-            if( GuiButton( button, "Save Map" ) ) {
+            if( GuiButton( button, "Save" ) ) {
+                if( state.path.buf ) {
+                    save_map( state, state.path.buf );
+                } else {
+                    state.file_mode = FileMode::SAVING;
+                }
+            }
+
+            button.x += button.width + GUI_GUTTER;
+
+            if( GuiButton( button, "Save As" ) ) {
                 state.file_mode = FileMode::SAVING;
+            }
+
+            button.x += button.width + GUI_GUTTER;
+
+            if( GuiButton( button, "Test" ) ) {
+                const char* test_map = "resources/maps/__test__.map";
+                save_map( state, test_map );
+#if defined(_WIN32)
+                #define GAME_EXE "build/windows/bigmode-2025-windows-x86-64.exe"
+#else
+                #define GAME_EXE "build/linux/bigmode-2025-linux-x86-64"
+#endif
+                system( TextFormat( GAME_EXE " --load=%s", test_map ) );
             }
         }
 
@@ -1093,9 +1131,14 @@ int main() {
 
             }
         } else if( state.file_mode == FileMode::SAVING ) {
+
             auto* diag = &state.file_dialog_state;
+            if( !diag->windowActive ) {
+                diag->itemFocused = 0;
+            }
             diag->windowActive = true;
             diag->saveFileMode = true;
+
             GuiWindowFileDialog( diag );
 
             if( diag->SelectFilePressed ) {
@@ -1242,6 +1285,17 @@ void load_map( State& state, const char* path ) {
         buf_append( &st->segments, s );
     }
     UnloadFileData( data );
+
+    int len = strlen( path );
+    if( state.path.cap < len + 1 ) {
+        state.path.buf = (char*)realloc( state.path.buf, len + 1 );
+    }
+
+    memset( state.path.buf, 0, len + 1 );
+    memcpy( state.path.buf, path, len );
+    state.path.len   = len;
+    state.path.dirty = true;
+
     TraceLog( LOG_INFO, "Loaded %s!", path );
 }
 void set_mode( State& state, Mode new_mode ) {
@@ -1265,6 +1319,8 @@ void set_mode( State& state, Mode new_mode ) {
 void hover_items(
     State& state, Vector2 mouse_world_position
 ) {
+    state.hover.clear();
+
     for( int i = 0; i < state.storage.objects.len; ++i ) {
         auto* o = state.storage.objects.buf + i;
         bool is_hovering;
@@ -1273,13 +1329,13 @@ void hover_items(
         switch( shape_desc.shape ) {
             case ObjectShape::CIRCLE: {
                 is_hovering = CheckCollisionPointCircle(
-                    mouse_world_position, o->position, shape_desc.circle.radius );
+                   o->position, mouse_world_position, shape_desc.circle.radius );
             } break;
             case ObjectShape::RECTANGLE: {
                 NonAxisAlignedRect rect = gen_non_axis_aligned_rect(
                     o->position, shape_desc.rectangle.size, o->rotation );
 
-                Vector2 _min = { 20000, 20000 }, _max = { -200000, -200000 };
+                Vector2 _min = rect.points[0], _max = rect.points[0];
                 for( int i = 0; i < 4; ++i ) {
                     Vector2 p = rect.points[i];
                     if( p.x < _min.x ) {
