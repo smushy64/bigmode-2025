@@ -20,7 +20,7 @@ float InverseLerp( float a, float b, float v ) {
     return (v - a) / (b - a);
 }
 
-void play_sfx( Vector2 src, Vector2 listener, Sound sound ) {
+void play_sfx( Vector2 src, Vector2 listener, Sound sound, float v ) {
     float atten; {
         float dist_sqr = Vector2DistanceSqr( src, listener );
         if( dist_sqr < SFX_ATTENUATION_DISTANCE_START_SQR ) {
@@ -36,7 +36,7 @@ void play_sfx( Vector2 src, Vector2 listener, Sound sound ) {
         }
     }
 
-    float volume = OptionVolume() * OptionVolumeSFX() * atten;
+    float volume = OptionVolume() * OptionVolumeSFX() * atten * v;
 
     float pitch_offset = ((float)GetRandomValue( -100, 100 ) / 100.0f) * 0.2;
 
@@ -44,13 +44,13 @@ void play_sfx( Vector2 src, Vector2 listener, Sound sound ) {
     SetSoundVolume( sound, volume );
     PlaySound( sound );
 }
-int play_sfx_random( Vector2 src, Vector2 listener, Sound* buf, int len ) {
+int play_sfx_random( Vector2 src, Vector2 listener, Sound* buf, int len, float volume ) {
     if( !buf || !len ) {
         return 0;
     }
     int idx = GetRandomValue( 0, 100000 ) % len;
 
-    play_sfx( src, listener, buf[idx] );
+    play_sfx( src, listener, buf[idx], volume );
     return idx;
 }
 float sound_length( const Sound& s ) {

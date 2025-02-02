@@ -20,7 +20,7 @@ readonly() float   CAMERA_HEIGHT     = 2.0;
 readonly() Vector3 CAMERA_TARGET_OFFSET = { 0.0, 1.35, 0.0 };
 
 readonly() float PLAYER_COLLISION_RADIUS   = 1.0;
-readonly() float PLAYER_COLLISION_RADIUS_2 = PLAYER_COLLISION_RADIUS * 2.0;
+readonly() float PLAYER_COLLISION_RADIUS_2 = PLAYER_COLLISION_RADIUS * PLAYER_COLLISION_RADIUS;
 
 readonly() float MAX_WALK_VELOCITY = 12.0;
 readonly() float MAX_RUN_VELOCITY  = 25.0;
@@ -28,13 +28,13 @@ readonly() float MAX_RUN_VELOCITY  = 25.0;
 readonly() float STOP_DRAG         = 10.0;
 readonly() float TURN_SPEED        = 30.0;
 
-readonly() float START_MAX_POWER         = 200.0;
+readonly() float START_MAX_POWER         = 100.0;
 readonly() float POWER_LOSS_RATE         = 1.2;
 readonly() float POWER_LOSS_IDLE_MULT    = 0.2;
 readonly() float POWER_LOSS_RUNNING_MULT = 2.0;
 
-readonly() float POWER_LOSS_ATTACK = 12.0;
-readonly() float POWER_LOSS_DODGE  = 30.0;
+readonly() float POWER_LOSS_ATTACK =  8.0;
+readonly() float POWER_LOSS_DODGE  = 10.0;
 
 readonly() float DODGE_TIME  = 0.45;
 readonly() float DODGE_SPEED = 15.0;
@@ -43,9 +43,12 @@ readonly() float DODGE_COOLDOWN_TIME = DODGE_TIME + 0.2;
 
 readonly() float TAKING_DAMAGE_TIME = 0.3;
 
-readonly() float ATTACK_TIME = 0.61;
+readonly() float ATTACK_TIME     = 0.29;
+readonly() float ATTACK_DAMAGE   = 25.0;
+readonly() float ATTACK_RADIUS   = 0.6;
+readonly() float ATTACK_RADIUS_2 = ATTACK_RADIUS * 2.0f;
 
-readonly() float ATTACK_DAMAGE = 25.0;
+readonly() float DEATH_TIME = 3.0;
 
 struct Input {
     Vector2 camera;
@@ -58,6 +61,7 @@ struct Input {
     bool is_dodge_press;
 
     bool is_using_gamepad;
+    bool is_pause_press;
 };
 
 enum class PlayerState {

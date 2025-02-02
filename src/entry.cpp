@@ -95,21 +95,25 @@ void update() {
 }
 
 void mode_load( GlobalState* state, Mode mode ) {
+    state->mode  = mode;
+    state->timer = 0.0;
+
     switch( mode ) {
         case Mode::INTRO: {
+            EnableCursor();
             mode_intro_load( state );
         } break;
         case Mode::MAIN_MENU: {
+            EnableCursor();
             mode_main_menu_load( state );
         } break;
         case Mode::GAME: {
+            DisableCursor();
             mode_game_load( state );
         } break;
     }
 
     TraceLog( LOG_INFO, "Loaded mode %s.", to_string(mode) );
-    state->mode  = mode;
-    state->timer = 0.0;
 }
 void mode_unload( GlobalState* state, Mode mode ) {
     switch( mode ) {

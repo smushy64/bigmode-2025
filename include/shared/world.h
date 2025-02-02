@@ -13,8 +13,7 @@
 #define MAP_IDENTIFIER "BM25"
 #define MAP_EXT        ".map"
 
-struct __attribute__((packed))
-MapFileHeader {
+struct MapFileHeader {
     uint8_t  identifier[4];
     uint32_t total_size;
 
@@ -22,17 +21,18 @@ MapFileHeader {
     uint16_t vertex_count;
     uint16_t segment_count;
 };
+static_assert(sizeof(MapFileHeader) == 16, "What?" );
 
-struct __attribute__((packed))
-MapFileObject {
+struct MapFileObject {
     Vector2    position;
-    ObjectType type    : 16;
+    ObjectType type;
     uint16_t   rotation;
 };
+static_assert(sizeof(MapFileObject) == 16, "What?" );
 
-struct __attribute__((packed))
-MapFileSegment {
+struct MapFileSegment {
     uint16_t start, end;
 };
+static_assert(sizeof(MapFileSegment) == 4, "What?" );
 
 #endif /* header guard */

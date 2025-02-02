@@ -31,13 +31,13 @@ struct Object {
     bool       is_active;
 
     union {
-        struct {
-
-        } player_spawn;
         Enemy enemy;
+
         struct {
             float power;
+            float timer;
         } battery;
+
         struct {
 
         } level_exit;
@@ -45,7 +45,7 @@ struct Object {
 
     static inline
     Object create_enemy( Vector3 position, float rotation, float radius = 5.0f ) {
-        Object result;
+        Object result = {};
         result.position  = position;
         result.type      = ObjectType::ENEMY;
         result.is_active = true;
@@ -56,6 +56,23 @@ struct Object {
         result.enemy.power  = 100.0f;
         result.enemy.facing_direction =
             Vector3RotateByAxisAngle( Vector3UnitX, Vector3UnitY, rotation );
+        return result;
+    }
+    static inline
+    Object create_battery( Vector2 position ) {
+        Object result = {};
+        result.type      = ObjectType::BATTERY;
+        result.is_active = true;
+        result.position  = { position.x, 1.0, position.y };
+        result.battery.power = 20.0;
+        return result;
+    }
+    static inline
+    Object create_level_exit( Vector2 position ) {
+        Object result = {};
+        result.type      = ObjectType::LEVEL_EXIT;
+        result.is_active = true;
+        result.position  = { position.x, 0.0, position.y };
         return result;
     }
 };

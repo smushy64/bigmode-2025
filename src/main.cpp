@@ -5,6 +5,7 @@
  * @date   January 23, 2025
 */
 #include "raylib.h"
+#define TraceLog(...)
 #include "entry.cpp"
 #include "state.h"
 
@@ -34,7 +35,7 @@ void game_exit() {
 #endif
 }
 
-const char* INITIAL_MAP = "resources/maps/level_00.map";
+const char* INITIAL_MAP = nullptr;
 
 #if defined(PLATFORM_WEB)
 int main() {
@@ -42,6 +43,9 @@ int main() {
 int main( int argc, char** argv ) {
     SetConfigFlags( FLAG_VSYNC_HINT );
 
+#if defined(RELEASE)
+    SetTraceLogLevel( LOG_NONE );
+#else
     for( int i = 1; i < argc; ++i ) {
         const char* arg = argv[i];
         int arg_len = strlen( arg );
@@ -53,6 +57,8 @@ int main( int argc, char** argv ) {
             break;
         }
     }
+#endif
+
 #endif
     InitWindow( WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_NAME );
     InitAudioDevice();

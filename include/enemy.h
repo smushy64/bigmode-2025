@@ -15,8 +15,8 @@
 readonly() float E_IDLE_TIME          = 1.0;
 readonly() float E_SCAN_TIME          = 0.8;
 readonly() float E_WANDER_TIME        = 1.5;
-readonly() float E_ALERT_TIME         = 0.5;
-readonly() float E_ATTACK_TIME        = 0.61;
+readonly() float E_ALERT_TIME         = 0.2;
+readonly() float E_ATTACK_TIME        = 0.61 * 1.3;
 readonly() float E_TAKING_DAMAGE_TIME = 0.3;
 readonly() float E_DYING_TIME         = 1.316;
 
@@ -38,6 +38,7 @@ readonly() float E_CHASE_ACCELERATION = 100.0f;
 readonly() float E_ATTACK_POWER = 20.0;
 readonly() float E_ATTACK_PUSH  = 20.0;
 
+readonly() float E_POWER_BONUS = 20.0;
 
 enum class EnemyState {
     IDLE,

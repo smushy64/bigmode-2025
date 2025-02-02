@@ -16,6 +16,9 @@
 #define WINDOW_HEIGHT  720
 #define WINDOW_NAME   "BIGMODE Game Jam 2025"
 
+#define LEVEL_NAME_TIME       2.0
+#define LEVEL_NAME_BEGIN_FADE 1.0
+
 struct SoundBuffer {
     Sound* buf;
     int    len;
@@ -55,24 +58,50 @@ struct GlobalState {
             Player       player;
 
             struct {
-                Model player;
+                Model bot;
                 Model wall;
+                Model battery;
+                Model level_exit;
             } models;
             struct {
                 Texture test;
                 Texture white;
+                Texture battery;
+                Texture floor;
+                Texture wall;
+                Texture ceiling;
             } textures;
+            struct {
+                Material bot;
+                Material enemy;
+                Material wall;
+                Material floor;
+                Material ceiling;
+                Material battery;
+                Material level_exit;
+            } materials;
+            struct {
+                MaterialMap bot;
+                MaterialMap enemy;
+                MaterialMap wall;
+                MaterialMap floor;
+                MaterialMap ceiling;
+                MaterialMap battery;
+                MaterialMap level_exit;
+            } material_maps;
 
             struct {
                 ModelAnimation* buf;
                 int             len;
-            } player_animation;
+            } animations;
 
             struct {
                 SoundBuffer step;
                 SoundBuffer dash;
                 SoundBuffer whiff;
                 SoundBuffer punch;
+                SoundBuffer death;
+                SoundBuffer powerup;
             } sounds;
 
             struct {
