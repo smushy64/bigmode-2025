@@ -9,6 +9,7 @@
 // IWYU pragma: begin_keep
 #include "shared/world.h"
 #include "shared/buffer.h"
+#include "shared/level.h"
 #include "raymath.h"
 #include <stddef.h>
 // IWYU pragma: end_keep
@@ -40,6 +41,11 @@ struct EdObject {
     Vector2    position;
     float      rotation;
     ObjectType type;
+    union {
+        struct {
+            LevelCondition condition;
+        } level_exit;
+    };
 };
 
 struct EdSegment {

@@ -26,17 +26,17 @@ readonly() float E_SFX_WALK_TIME = 0.5;
 readonly() float E_SIGHT_RANGE = 10.0;
 
 readonly() float E_WANDER_MAX_VELOCITY = 5.0;
-readonly() float E_CHASE_MAX_VELOCITY  = 10.0;
+readonly() float E_CHASE_MAX_VELOCITY  = 9.8;
 
 readonly() float E_RETURN_HOME_DISTANCE = 0.1;
 
-readonly() float E_DEFAULT_RADIUS = 15.0;
+readonly() float E_DEFAULT_RADIUS = 25.0;
 
 readonly() float E_ACCELERATION       = 25.0f;
 readonly() float E_CHASE_ACCELERATION = 100.0f;
 
 readonly() float E_ATTACK_POWER = 20.0;
-readonly() float E_ATTACK_PUSH  = 20.0;
+readonly() float E_ATTACK_PUSH  = 22.0;
 
 readonly() float E_POWER_BONUS = 20.0;
 

@@ -52,7 +52,7 @@ Vector2 world_collision_check(
 
 void spawn_enemy(
     GlobalState* state, Vector3 position,
-    float rotation, float radius = E_DEFAULT_RADIUS );
+    float rotation, float radius = E_DEFAULT_RADIUS, float power = 50.0f );
 void load_sound_set( SoundBuffer* buf, const char* name );
 
 void load_map( GlobalState* state, const char* path );
@@ -62,7 +62,8 @@ void player_init( Player* player ) {
     player->state              = PlayerState::DEFAULT;
     player->movement_direction = { 0.0, 0.0, 1.0 };
     player->max_velocity       = MAX_WALK_VELOCITY;
-    player->max_power = player->power_target = player->power = START_MAX_POWER;
+    player->max_power          = player->power_target  = player->power = START_MAX_POWER;
+    player->camera_rotation    = { 0.01, 0.01 };
 
     player->input    = {};
     player->velocity = {};
@@ -112,18 +113,36 @@ void mode_game_load( GlobalState* state ) {
     auto* game = &state->transient.game;
     running_map_counter = 0;
 
+    game->music = LoadMusicStream( "resources/audio/music/music_game.wav");
+    PlayMusicStream( game->music );
+
     game->textures.test = LoadTexture( "resources/textures/test.jpg" );
 
     game->textures.battery = LoadTexture( "resources/textures/battery_base_color.png" );
     game->textures.floor   = LoadTexture( "resources/textures/floor_base_color.png" );
     GenTextureMipmaps( &game->textures.floor );
+    SetTextureWrap( game->textures.floor, TEXTURE_WRAP_REPEAT );
     SetTextureFilter( game->textures.floor, TEXTURE_FILTER_ANISOTROPIC_16X );
     game->textures.ceiling = LoadTexture( "resources/textures/ceiling_base_color.png" );
+    SetTextureWrap( game->textures.ceiling, TEXTURE_WRAP_REPEAT );
     GenTextureMipmaps( &game->textures.ceiling );
     SetTextureFilter( game->textures.ceiling, TEXTURE_FILTER_ANISOTROPIC_16X );
     game->textures.wall    = LoadTexture( "resources/textures/wall_base_color.png" );
     GenTextureMipmaps( &game->textures.wall );
+    SetTextureWrap( game->textures.wall, TEXTURE_WRAP_REPEAT );
     SetTextureFilter( game->textures.wall, TEXTURE_FILTER_ANISOTROPIC_16X );
+    game->textures.wall2   = LoadTexture( "resources/textures/wall2_base_color.png" );
+    GenTextureMipmaps( &game->textures.wall2 );
+    SetTextureWrap( game->textures.wall2, TEXTURE_WRAP_REPEAT );
+    SetTextureFilter( game->textures.wall2, TEXTURE_FILTER_ANISOTROPIC_16X );
+    game->textures.wall3   = LoadTexture( "resources/textures/wall3_base_color.png" );
+    GenTextureMipmaps( &game->textures.wall3 );
+    SetTextureWrap( game->textures.wall3, TEXTURE_WRAP_REPEAT );
+    SetTextureFilter( game->textures.wall3, TEXTURE_FILTER_ANISOTROPIC_16X );
+    game->textures.wall4   = LoadTexture( "resources/textures/wall4_base_color.png" );
+    GenTextureMipmaps( &game->textures.wall4 );
+    SetTextureWrap( game->textures.wall4, TEXTURE_WRAP_REPEAT );
+    SetTextureFilter( game->textures.wall4, TEXTURE_FILTER_ANISOTROPIC_16X );
 
     #define PLAYER_MODEL_PATH "resources/meshes/obj_bot.glb"
 
@@ -131,9 +150,10 @@ void mode_game_load( GlobalState* state ) {
     game->animations.buf = LoadModelAnimations(
         PLAYER_MODEL_PATH, &game->animations.len );
 
-    game->models.wall       = LoadModel( "resources/meshes/scene_wall.glb" );
-    game->models.battery    = LoadModel( "resources/meshes/obj_battery.glb" );
-    game->models.level_exit = LoadModel( "resources/meshes/obj_level_exit.glb" );
+    game->models.wall          = LoadModel( "resources/meshes/scene_wall.glb" );
+    game->models.battery       = LoadModel( "resources/meshes/obj_battery.glb" );
+    game->models.level_exit    = LoadModel( "resources/meshes/obj_level_exit.glb" );
+    game->models.floor_ceiling = LoadModel( "resources/meshes/scene_floor_ceiling.glb" );
 
     /* Animations */ {
         TraceLog( LOG_INFO, "Animations: ");
@@ -158,13 +178,6 @@ void mode_game_load( GlobalState* state ) {
         }
     }
 
-    if( INITIAL_MAP ) {
-        TraceLog( LOG_INFO, "Loading %s . . .", INITIAL_MAP );
-        load_map( state, INITIAL_MAP );
-    } else {
-        load_next_map( state );
-    }
-
     /* White texture */ {
         Color white = {255, 255, 255, 255};
         Image img;
@@ -182,6 +195,9 @@ void mode_game_load( GlobalState* state ) {
     load_sound_set( &game->sounds.punch, "punch" );
     load_sound_set( &game->sounds.death, "death" );
     load_sound_set( &game->sounds.powerup, "powerup" );
+    load_sound_set( &game->sounds.fallapart, "fallapart" );
+    load_sound_set( &game->sounds.takedamage, "takedamage" );
+    load_sound_set( &game->sounds.nextlevel, "nextlevel" );
 
     game->materials.bot.shader        = state->sh_basic_shading;
     game->materials.bot.maps          = &game->material_maps.bot;
@@ -193,7 +209,7 @@ void mode_game_load( GlobalState* state ) {
     game->materials.enemy.maps->color   = Color{ 255, 110, 120, 255 };
     game->materials.enemy.maps->texture = game->textures.white;
 
-    game->materials.wall.shader        = state->sh_basic_shading;
+    game->materials.wall.shader        = state->sh_wall;
     game->materials.wall.maps          = &game->material_maps.wall;
     game->materials.wall.maps->color   = WHITE;
     game->materials.wall.maps->texture = game->textures.wall;
@@ -201,14 +217,16 @@ void mode_game_load( GlobalState* state ) {
     game->materials.level_exit.shader        = state->sh_basic_shading;
     game->materials.level_exit.maps          = &game->material_maps.level_exit;
     game->materials.level_exit.maps->color   = GOLD;
-    game->materials.level_exit.maps->texture = game->textures.white;
+    game->materials.level_exit.maps->texture = game->textures.wall;
 
-    game->materials.floor.shader        = state->sh_basic_shading;
+    // game->materials.floor.shader        = state->sh_basic_shading;
+    game->materials.floor.shader        = state->sh_wall;
     game->materials.floor.maps          = &game->material_maps.floor;
     game->materials.floor.maps->color   = WHITE;
     game->materials.floor.maps->texture = game->textures.floor;
 
-    game->materials.ceiling.shader        = state->sh_basic_shading;
+    // game->materials.ceiling.shader        = state->sh_basic_shading;
+    game->materials.ceiling.shader        = state->sh_wall;
     game->materials.ceiling.maps          = &game->material_maps.ceiling;
     game->materials.ceiling.maps->color   = WHITE;
     game->materials.ceiling.maps->texture = game->textures.ceiling;
@@ -219,6 +237,19 @@ void mode_game_load( GlobalState* state ) {
     game->materials.battery.maps->texture = game->textures.battery;
 
     DisableCursor();
+
+    Vector2 clipping_planes = { 0.01, 1000.0 };
+    SetShaderValue(
+        state->sh_wall, state->sh_wall_loc_dist,
+        &clipping_planes, SHADER_UNIFORM_VEC2 );
+
+    if( INITIAL_MAP ) {
+        TraceLog( LOG_INFO, "Loading %s . . .", INITIAL_MAP );
+        load_map( state, INITIAL_MAP );
+    } else {
+        load_next_map( state );
+    }
+
 }
 void set_pause( GlobalState* state, bool paused );
 
@@ -250,12 +281,16 @@ void player_update( GlobalState* state, float dt );
 void mode_game_update( GlobalState* state, float dt ) {
     auto* game = &state->transient.game;
 
+    SetMusicVolume( game->music, OptionVolume() * OptionVolumeMusic() );
+    UpdateMusicStream( game->music );
+
     read_input( state, dt );
 
-    if( game->player.input.is_pause_press ) {
+    if( game->player.input.is_pause_press && !game->is_exiting_stage ) {
         set_pause( state, !game->is_paused );
     }
-    if( !game->is_paused ) {
+
+    if( !game->is_paused && !game->is_exiting_stage ) {
         player_update( state, dt );
         
         for( int i = 0; i < game->objects.len; ++i ) {
@@ -270,15 +305,19 @@ void mode_game_update( GlobalState* state, float dt ) {
 
                     Vector3 current_direction;
                     float   velocity_length_sqr = Vector3LengthSqr( obj->enemy.velocity );
-                    if( !velocity_length_sqr ) {
+                    if( obj->enemy.state == EnemyState::TAKING_DAMAGE ) {
                         current_direction = obj->enemy.facing_direction;
                     } else {
-                        current_direction = obj->enemy.velocity / sqrt( velocity_length_sqr );
+                        if( !velocity_length_sqr ) {
+                            current_direction = obj->enemy.facing_direction;
+                        } else {
+                            current_direction = obj->enemy.velocity / sqrt( velocity_length_sqr );
+                        }
                     }
 
                     EnemyState start_state = obj->enemy.state;
 
-                    Vector2 scan_direction;
+                    Vector2 scan_direction = {};
 
                     float max_velocity = E_WANDER_MAX_VELOCITY;
                     float drag         = 0.0;
@@ -379,7 +418,7 @@ void mode_game_update( GlobalState* state, float dt ) {
                                 play_sfx_random(
                                     { game->player.position.x, game->player.position.z },
                                     { obj->position.x, obj->position.z },
-                                    game->sounds.step.buf, game->sounds.step.len, 0.5 );
+                                    game->sounds.step.buf, game->sounds.step.len, 0.25 );
                             }
 
                         } break;
@@ -418,7 +457,7 @@ void mode_game_update( GlobalState* state, float dt ) {
                                 play_sfx_random(
                                     { game->player.position.x, game->player.position.z },
                                     { obj->position.x, obj->position.z },
-                                    game->sounds.step.buf, game->sounds.step.len, 0.5 );
+                                    game->sounds.step.buf, game->sounds.step.len, 0.25 );
                             }
                         } break;
                         case EnemyState::ATTACKING: {
@@ -439,18 +478,34 @@ void mode_game_update( GlobalState* state, float dt ) {
                                 attack_circle, ATTACK_RADIUS,
                                 player_circle, PLAYER_COLLISION_RADIUS
                             ) ) {
+
+                                for( int j = 0; j < game->objects.len; ++j ) {
+                                    auto* other_obj = game->objects.buf + j;
+                                    if(
+                                        !other_obj->is_active                           ||
+                                        other_obj->type != ObjectType::ENEMY            ||
+                                        other_obj->enemy.state != EnemyState::ATTACKING ||
+                                        other_obj->enemy.state != EnemyState::CHASING   ||
+                                        j == i
+                                    ) {
+                                        continue;
+                                    }
+                                    other_obj->enemy.state = EnemyState::ALERT;
+                                }
+
                                 game->player.power_target -= E_ATTACK_POWER;
 
                                 game->player.velocity +=
                                     obj->enemy.facing_direction * E_ATTACK_PUSH;
 
                                 game->player.state = PlayerState::TAKING_DAMAGE;
+                                play_sfx( {}, {}, game->sounds.takedamage.buf[0], 0.5 );
 
                                 play_sfx_random(
                                     { game->camera.position.x, game->camera.position.z },
                                     { obj->position.x, obj->position.z },
                                     game->sounds.punch.buf,
-                                    game->sounds.punch.len );
+                                    game->sounds.punch.len, 0.5 );
                             } else if( obj->enemy.timer >= E_ATTACK_TIME ) {
                                 obj->enemy.state = EnemyState::CHASING;
                             }
@@ -482,12 +537,18 @@ void mode_game_update( GlobalState* state, float dt ) {
                                 play_sfx_random(
                                     { game->player.position.x, game->player.position.z },
                                     { obj->position.x, obj->position.z },
-                                    game->sounds.step.buf, game->sounds.step.len, 0.5 );
+                                    game->sounds.step.buf, game->sounds.step.len, 0.25 );
                             }
 
                         } break;
                         case EnemyState::TAKING_DAMAGE: {
                             max_velocity = 1000.0;
+                            if(
+                                obj->enemy.timer > (E_TAKING_DAMAGE_TIME / 2.0) &&
+                                game->player.state == PlayerState::ATTACK
+                            ) {
+                                game->player.state = PlayerState::DEFAULT;
+                            }
                             if( obj->enemy.timer > E_TAKING_DAMAGE_TIME ) {
                                 obj->enemy.state = EnemyState::CHASING;
                                 for( int j = 0; j < game->objects.len; ++j ) {
@@ -529,6 +590,7 @@ void mode_game_update( GlobalState* state, float dt ) {
                             drag = 100.0;
                             if( obj->enemy.timer > E_DYING_TIME + 0.2 ) {
                                 obj->is_active = false;
+                                game->enemy_counter--;
                             }
                         } break;
                     }
@@ -541,7 +603,10 @@ void mode_game_update( GlobalState* state, float dt ) {
                         case EnemyState::CHASING:
                         case EnemyState::RETURN_HOME: {
                             auto* player = &game->player;
-                            if( player->state == PlayerState::ATTACK ) {
+                            if(
+                                player->state == PlayerState::ATTACK &&
+                                !player->attack_landed
+                            ) {
                                 Vector2 player_attack_position =
                                     Vector2{ player->position.x, player->position.z } +
                                     (Vector2{
@@ -555,6 +620,7 @@ void mode_game_update( GlobalState* state, float dt ) {
                                     pos, PLAYER_COLLISION_RADIUS,
                                     player_attack_position, ATTACK_RADIUS
                                 ) ) {
+                                    player->attack_landed = true;
                                     obj->enemy.state = EnemyState::TAKING_DAMAGE;
                                     obj->enemy.power -= ATTACK_DAMAGE;
 
@@ -569,6 +635,10 @@ void mode_game_update( GlobalState* state, float dt ) {
                                         obj->enemy.state = EnemyState::DYING;
                                         game->player.power_target += E_POWER_BONUS;
                                         play_sfx( {}, {}, game->sounds.powerup.buf[0] );
+                                        play_sfx(
+                                            { obj->position.x, obj->position.z }, 
+                                            { game->camera.position.x, game->camera.position.z },
+                                            game->sounds.fallapart.buf[0] );
                                     }
 
                                     play_sfx_random(
@@ -621,9 +691,9 @@ void mode_game_update( GlobalState* state, float dt ) {
 
                     bool wall_blocked = false;
 
-                    Vector3 velocity = obj->enemy.velocity; {
+                    Vector3 velocity = obj->enemy.velocity;
+                    float speed = Vector3Length( velocity ); {
                         Vector2 position = { obj->position.x, obj->position.z };
-                        float speed = Vector3Length( velocity );
 
                         for( int j = 0; j < game->segments.len; ++j ) {
                             Segment* seg = game->segments.buf + j;
@@ -632,7 +702,7 @@ void mode_game_update( GlobalState* state, float dt ) {
                             start = game->vertexes.buf[seg->start];
                             end   = game->vertexes.buf[seg->end];
 
-                            if( CheckCollisionCircleLine( position, 1.0, start, end ) ) {
+                            if( CheckCollisionCircleLine( position, PLAYER_COLLISION_RADIUS, start, end ) ) {
                                 Vector2 normal = Vector2Rotate(
                                     Vector2Normalize( start - end ), 90 * (M_PI / 180.0) );
 
@@ -663,6 +733,33 @@ void mode_game_update( GlobalState* state, float dt ) {
 
                         }
 
+                    }
+                    for( int j = 0; j < game->objects.len; ++j ) {
+                        auto* other = game->objects.buf + j;
+                        if(
+                            !other->is_active ||
+                            other->type != ObjectType::ENEMY ||
+                            i == j
+                        ) {
+                            continue;
+                        }
+
+                        Vector2 pos       = { obj->position.x, obj->position.z };
+                        Vector2 other_pos = { other->position.x, other->position.z };
+
+                        if( CheckCollisionCircles(
+                            pos,       PLAYER_COLLISION_RADIUS,
+                            other_pos, PLAYER_COLLISION_RADIUS
+                        ) ) {
+                            Vector2 to_other = pos - other_pos;
+                            float   dist     = Vector2Length( to_other );
+                            if( dist <= 0.0 ) {
+                                continue;
+                            }
+                            to_other /= dist;
+
+                            velocity += Vector3{ to_other.x, 0.0, to_other.y } * speed;
+                        }
                     }
 
                     if(
@@ -723,6 +820,8 @@ void mode_game_update( GlobalState* state, float dt ) {
                         obj->enemy.first_frame_state = true;
                         obj->enemy.timer             = 0;
                         obj->enemy.sfx_timer         = 0;
+                        obj->enemy.animation_frame   = 0;
+                        obj->enemy.animation_timer   = 0;
                     } else {
                         obj->enemy.first_frame_state = false;
                     }
@@ -741,18 +840,34 @@ void mode_game_update( GlobalState* state, float dt ) {
                         PLAYER_COLLISION_RADIUS
                     ) ) {
                         game->player.power_target += obj->battery.power;
+                        game->battery_counter--;
                         obj->is_active = false;
 
                         play_sfx( {}, {}, game->sounds.powerup.buf[0] );
                     }
                 } break;
                 case ObjectType::LEVEL_EXIT: {
-                    if( CheckCollisionCircles(
+                    bool can_exit = true;
+                    switch( obj->level_exit.condition ) {
+                        case LevelCondition::DEFEAT_ENEMIES: {
+                            can_exit = !game->enemy_counter;
+                        } break;
+                        case LevelCondition::COLLECT_BATTERIES: {
+                            can_exit = !game->battery_counter;
+                        } break;
+                        case LevelCondition::DEFEAT_ENEMIES_AND_COLLECT_BATTERIES: {
+                            can_exit = !game->enemy_counter && !game->battery_counter;
+                        } break;
+                        case LevelCondition::NONE:
+                        case LevelCondition::COUNT: break;
+                    }
+                    if( can_exit && CheckCollisionCircles(
                         { obj->position.x, obj->position.z }, 1.0,
                         { game->player.position.x, game->player.position.z },
                         PLAYER_COLLISION_RADIUS
                     ) ) {
-                        load_next_map( state );
+                        game->is_exiting_stage = true;
+                        play_sfx( {}, {}, game->sounds.nextlevel.buf[0], 0.8, false );
                         return;
                     }
                 } break;
@@ -765,7 +880,6 @@ void mode_game_update( GlobalState* state, float dt ) {
         }
     }
 
-
     if( game->player.state == PlayerState::IS_DEAD ) {
         if( game->player.inv_time >= DEATH_TIME ) {
             running_map_counter--;
@@ -774,10 +888,33 @@ void mode_game_update( GlobalState* state, float dt ) {
         }
     }
 
+    if( game->is_exiting_stage ) {
+        game->player.position += game->player.velocity * dt;
+        game->player.velocity *= 1.0 - dt * 8.0;
+        game->player.state     = PlayerState::DEFAULT;
+
+        if( game->exit_stage_timer >= LEVEL_EXIT_TIME ) {
+            load_next_map( state );
+            return;
+        }
+        game->exit_stage_timer += dt;
+    } else {
+        game->level_timer += dt;
+    }
+
     game_draw( state, dt );
+
+    if( game->pause_menu_state.reset_level ) {
+        game->is_paused = false;
+        DisableCursor();
+        running_map_counter--;
+        load_next_map( state );
+    }
 }
 void mode_game_unload( GlobalState* state ) {
     auto* game = &state->transient.game;
+
+    UnloadMusicStream( game->music );
 
     if( game->objects.buf ) {
         free( game->objects.buf );
@@ -902,8 +1039,9 @@ void player_update( GlobalState* state, float dt ) {
                 player->input.is_dodge_press &&
                 player->dodge_cooldown_timer > DODGE_COOLDOWN_TIME
             ) {
-                player->state    = PlayerState::DODGE;
-                player->inv_time = 0.0;
+                player->state        = PlayerState::DODGE;
+                player->max_velocity = MAX_RUN_VELOCITY;
+                player->inv_time     = 0.0;
 
                 player->velocity = movement * DODGE_SPEED;
 
@@ -920,6 +1058,7 @@ void player_update( GlobalState* state, float dt ) {
             } else if( player->input.is_punch_press ) {
                 player->state         = PlayerState::ATTACK;
                 player->power_target -= POWER_LOSS_ATTACK;
+                player->attack_landed = false;
 
                 player->which_attack = !player->which_attack;
 
@@ -976,23 +1115,58 @@ void player_update( GlobalState* state, float dt ) {
 
             player->velocity += movement * dt * 100.0; 
 
-            Vector3 direction_target = Vector3Normalize( movement );
-            player->movement_direction =
-                Vector3Normalize(
-                    Vector3Lerp( player->movement_direction,
-                        direction_target, TURN_SPEED * dt ) );
+            player->movement_direction = Vector3Normalize( movement );
 
             player->sfx_walk_timer += dt;
             if( player->sfx_walk_timer >= player->sfx_walk_time ) {
-                if( game->sounds.step.buf ) {
-                    int idx = play_sfx_random(
-                        {}, {},
-                        game->sounds.step.buf, game->sounds.step.len, 0.5 );
+                int idx = play_sfx_random(
+                    {}, {},
+                    game->sounds.step.buf, game->sounds.step.len, 0.25 );
 
-                    player->sfx_walk_time  = sound_length( game->sounds.step.buf[idx] );
-                    player->sfx_walk_timer = 0.0;
+                player->sfx_walk_time  = sound_length( game->sounds.step.buf[idx] );
+                player->sfx_walk_timer = 0.0;
+            }
+
+            float speed = Vector3Length( player->velocity );
+            for( int i = 0; i < game->objects.len; ++i ) {
+                auto* o = game->objects.buf + i;
+                if( !o->is_active || o->type != ObjectType::ENEMY ) {
+                    continue;
+                }
+
+                Vector2 pos  = { player->position.x, player->position.z };
+                Vector2 epos = { o->position.x, o->position.z };
+
+                if( CheckCollisionCircles(
+                    pos,  PLAYER_COLLISION_RADIUS,
+                    epos, PLAYER_COLLISION_RADIUS
+                ) ) {
+                    Vector2 to_other = pos - epos;
+                    float   dist     = Vector2Length( to_other );
+                    if( dist <= 0.0 ) {
+                        continue;
+                    }
+                    to_other /= dist;
+
+                    player->velocity += Vector3{ to_other.x, 0.0, to_other.y } * speed;
+
+                    switch( o->enemy.state ) {
+                        case EnemyState::IDLE:
+                        case EnemyState::SCAN:
+                        case EnemyState::WANDER:
+                        case EnemyState::RETURN_HOME: {
+                            o->enemy.state = EnemyState::ALERT;
+                        } break;
+
+                        case EnemyState::ALERT:
+                        case EnemyState::CHASING:
+                        case EnemyState::ATTACKING:
+                        case EnemyState::TAKING_DAMAGE:
+                        case EnemyState::DYING: break;
+                    }
                 }
             }
+
         } break;
         case PlayerState::DODGE: {
             player->inv_time    += dt;
@@ -1226,7 +1400,7 @@ void game_draw( GlobalState* state, float dt ) {
     /* 3D */ {
 
         BeginMode3D( game->camera );
-        ClearBackground( BLUE );
+        ClearBackground( BLACK );
 
         BeginShaderMode( state->sh_basic_shading );
         // NOTE(alicia): BEGIN SHADER
@@ -1360,11 +1534,27 @@ void game_draw( GlobalState* state, float dt ) {
                         game->materials.battery, transform );
                 } break;
                 case ObjectType::LEVEL_EXIT: {
-                    transform =
-                        MatrixTranslate( obj->position.x, obj->position.y, obj->position.z );
-                    DrawMesh(
-                        game->models.level_exit.meshes[0],
-                        game->materials.level_exit, transform );
+                    bool can_draw = true;
+                    switch( obj->level_exit.condition ) {
+                        case LevelCondition::DEFEAT_ENEMIES: {
+                            can_draw = !game->enemy_counter;
+                        } break;
+                        case LevelCondition::COLLECT_BATTERIES: {
+                            can_draw = !game->battery_counter;
+                        } break;
+                        case LevelCondition::DEFEAT_ENEMIES_AND_COLLECT_BATTERIES: {
+                            can_draw = !game->enemy_counter && !game->battery_counter;
+                        } break;
+                        case LevelCondition::NONE: 
+                        case LevelCondition::COUNT: break;
+                    }
+                    if( can_draw ) {
+                        transform =
+                            MatrixTranslate( obj->position.x, obj->position.y, obj->position.z );
+                        DrawMesh(
+                            game->models.level_exit.meshes[0],
+                            game->materials.level_exit, transform );
+                    }
                 } break;
                 case ObjectType::PLAYER_SPAWN:
                 case ObjectType::NONE:
@@ -1372,10 +1562,39 @@ void game_draw( GlobalState* state, float dt ) {
             }
         }
 
-        /* Draw Ceiling/Floor */ {
-            DrawPlaneInv( game->materials.ceiling, {1000, 1000}, { 0.0,  10.1, 0.0 }, { 10000.0, 10000.0 }, WHITE );
-            DrawPlane   ( game->materials.floor, {1000, 1000}, { 0.0,  -0.1, 0.0 }, { 10000.0, 10000.0 }, WHITE );
+        // DrawPlaneInv( game->materials.ceiling, {1000, 1000}, { 0.0,  10.1, 0.0 }, { 10000.0, 10000.0 }, WHITE );
+        // DrawPlane   ( game->materials.floor, {1000, 1000}, { 0.0,  -0.1, 0.0 }, { 10000.0, 10000.0 }, WHITE );
+        // NOTE(alicia): END SHADER
+        EndShaderMode();
+
+        BeginShaderMode( state->sh_wall );
+
+        int apply_dist = 0;
+        SetShaderValue(
+            state->sh_wall,
+            state->sh_wall_loc_camera_position,
+            &game->camera.position, SHADER_UNIFORM_VEC3 );
+
+        /* Draw Floor/Ceiling */ {
+            SetShaderValue(
+                state->sh_wall,
+                state->sh_wall_loc_apply_dist,
+                &apply_dist, SHADER_UNIFORM_INT );
+            DrawMesh(
+                game->models.floor_ceiling.meshes[0],
+                game->materials.floor, MatrixIdentity() );
+            DrawMesh(
+                game->models.floor_ceiling.meshes[0],
+                game->materials.ceiling,
+                MatrixRotateX( M_PI ) * MatrixTranslate( 0.0, 10.0, 0.0 ) );
         }
+
+        apply_dist = 1;
+        SetShaderValue(
+            state->sh_wall,
+            state->sh_wall_loc_apply_dist,
+            &apply_dist, SHADER_UNIFORM_INT );
+
         /* Draw Walls */ {
             auto* vert = &game->vertexes;
             auto* seg  = &game->segments;
@@ -1388,6 +1607,11 @@ void game_draw( GlobalState* state, float dt ) {
                 float angle = Vector2Angle( start - end, Vector2{ 0.0, 1.0 });
                 float dist  = Vector2Distance( start, end );
 
+                SetShaderValue(
+                    state->sh_wall,
+                    state->sh_wall_loc_dist,
+                    &dist, SHADER_UNIFORM_FLOAT );
+
                 Matrix transform =
                     MatrixScale( 0.1, 10.0, dist ) *
                     MatrixRotateY( angle ) *
@@ -1396,14 +1620,16 @@ void game_draw( GlobalState* state, float dt ) {
             }
         }
 
-        // NOTE(alicia): END SHADER
         EndShaderMode();
 
 // NOTE(alicia): DEBUG DRAWING
 #if !defined(RELEASE)
         DrawCylinderWires(
-            player->position, 1.0, 1.0, 2.0, 8, CYAN );
-        if( player->state == PlayerState::ATTACK ) {
+            player->position,
+            PLAYER_COLLISION_RADIUS,
+            PLAYER_COLLISION_RADIUS,
+            2.0, 8, CYAN );
+        if( player->state == PlayerState::ATTACK && !player->attack_landed ) {
             DrawCylinderWires(
                 player->position + (player->movement_direction * ATTACK_RADIUS_2), 
                 ATTACK_RADIUS, ATTACK_RADIUS, 2.0, 8, RED );
@@ -1510,6 +1736,12 @@ void game_draw( GlobalState* state, float dt ) {
             blit_texture( state );
         }
 
+        Vector2 screen = {
+            (float)GetScreenWidth(),
+            (float)GetScreenHeight()
+        };
+
+        float font_size = 36;
         if( state->timer < LEVEL_NAME_TIME ) {
             float t;
             if( state->timer < LEVEL_NAME_BEGIN_FADE ) {
@@ -1518,35 +1750,75 @@ void game_draw( GlobalState* state, float dt ) {
                 t = 1.0 - ((state->timer - LEVEL_NAME_BEGIN_FADE) / (LEVEL_NAME_TIME - LEVEL_NAME_BEGIN_FADE));
             }
 
-            float font_size = 36;
-            Vector2 screen = {
-                (float)GetScreenWidth(),
-                (float)GetScreenHeight()
-            };
-            const char* text = TextFormat( "LEVEL %02i", running_map_counter );
+            const char* text  = TextFormat( "LEVEL %02i", running_map_counter );
             Vector2 text_size = MeasureTextEx( state->persistent.font, text, font_size, 1.0 );
-            Vector2 position = Vector2{screen.x / 2.0f, screen.y / 4.0f} - (text_size / 2.0f);
+            Vector2 position  = Vector2{screen.x / 2.0f, screen.y / 4.0f} - (text_size / 2.0f);
 
             DrawTextEx(
                 state->persistent.font, text,
                 position, font_size, 1.0, ColorAlpha( RAYWHITE, t ));
+
+            position.y += text_size.y + 0.4;
+            text      = TextFormat( "%s", get_description( game->condition ) );
+            text_size = MeasureTextEx( state->persistent.font, text, font_size, 1.0 );
+            position.x = (screen.x / 2.0f) - (text_size.x / 2.0f);
+
+            DrawTextEx(
+                state->persistent.font, text,
+                position, font_size, 1.0, ColorAlpha( RAYWHITE, t ));
+
+        }
+        const char* tutorial_text = nullptr;
+        switch( running_map_counter ) {
+            case 1: {
+                if( game->player.input.is_using_gamepad ) {
+                    tutorial_text = "Use the Left Stick to move.\nPress the X button to attack and the A button to dodge.\nAll actions consume battery.";
+                } else {
+                    tutorial_text = "Press the WASD keys to move.\nPress the Left Mouse Button to attack and the Space bar to dodge.\nAll actions consume battery.";
+                }
+            } break;
         }
 
+        if( tutorial_text ) {
+            Vector2 text_size = MeasureTextEx(
+                state->persistent.font, tutorial_text, font_size, 1.0 );
+            Vector2 position = {
+                5.0f,
+                screen.y - (text_size.y + 5.0f)
+            };
+            DrawTextEx( state->persistent.font, tutorial_text, position, font_size, 1.0, WHITE );
+        }
+
+        float power_box_label_font_size = 24;
+        const char* power_box_label  = "BATTERY";
+        Vector2 power_box_label_size =
+            MeasureTextEx(
+                state->persistent.font, power_box_label,
+                power_box_label_font_size, 1.0 );
+
+        DrawTextEx(
+            state->persistent.font, power_box_label,
+            { 30.0, 30.0 + 4.0 },
+            power_box_label_font_size, 1, WHITE );
+
         Rectangle power_box = {
-            30.0, 30.0,
+            30.0f + power_box_label_size.x + 8.0f,
+            30.0f,
             player->max_power * 2.0f,
             28.0
         };
 
         Rectangle outline = power_box;
-        outline.y = outline.x -= 2.0;
+        outline.x -= 2.0;
+        outline.y -= 2.0;
         outline.width  += 4.0;
         outline.height += 4.0;
 
         Rectangle power_box_fill = power_box;
         power_box_fill.width = (player->power / player->max_power) * power_box.width;
 
-        power_box_fill.x = power_box_fill.y += 2.0;
+        power_box_fill.x += 2.0;
+        power_box_fill.y += 2.0;
         power_box_fill.width  -= 4.0;
         power_box_fill.height -= 4.0;
 
@@ -1562,6 +1834,44 @@ void game_draw( GlobalState* state, float dt ) {
         draw( power_box_fill, POWER_FG_COLOR );
 
         #undef draw
+
+        Vector2 text_pos = { 30.0, outline.y + outline.height };
+        font_size = 24.0;
+        switch( game->condition ) {
+            case LevelCondition::NONE: break;
+            case LevelCondition::DEFEAT_ENEMIES: {
+                DrawTextEx(
+                    state->persistent.font,
+                    TextFormat(
+                        "ENEMIES: %i / %i",
+                        game->total_enemy_count - game->enemy_counter,
+                        game->total_enemy_count ),
+                    text_pos, font_size, 1.0, WHITE );
+            } break;
+            case LevelCondition::COLLECT_BATTERIES: {
+                DrawTextEx(
+                    state->persistent.font,
+                    TextFormat(
+                        "BATTERIES: %i / %i",
+                        game->total_battery_count - game->battery_counter,
+                        game->total_battery_count ),
+                    text_pos, font_size, 1.0, WHITE );
+
+            } break;
+            case LevelCondition::DEFEAT_ENEMIES_AND_COLLECT_BATTERIES: {
+                DrawTextEx(
+                    state->persistent.font,
+                    TextFormat(
+                        "ENEMIES: %i / %i\nBATTERIES: %i / %i",
+                        game->total_enemy_count - game->enemy_counter,
+                        game->total_enemy_count,
+                        game->total_battery_count - game->battery_counter,
+                        game->total_battery_count ),
+                    text_pos, font_size, 1.0, WHITE );
+            } break;
+            case LevelCondition::COUNT:
+              break;
+        }
 
         Vector2 power_box_center = {
             power_box.x + (power_box.width / 2.0f),
@@ -1589,16 +1899,66 @@ void game_draw( GlobalState* state, float dt ) {
                 EndDrawing();
                 return;
             }
+            if( game->pause_menu_state.reset_level ) {
+                EndDrawing();
+                return;
+            }
         }
 
         if( player->state == PlayerState::IS_DEAD ) {
-            Vector2 screen = get_screen();
-
-            Vector2 text_size = MeasureTextEx( state->persistent.font, "GAME OVER", 38.0, 1.0 );
+            float fsize = 40;
+            Vector2 text_size = MeasureTextEx( state->persistent.font, "YOU DIED", fsize, 1.0 );
             DrawTextPro(
-                state->persistent.font, "GAME OVER",
+                state->persistent.font, "YOU DIED",
                 screen / 2.0f, { text_size.x / 2.0f, text_size.y },
-                0.0f, 38.0f, 1.0f, RED );
+                0.0f, fsize, 1.0f, RED );
+        }
+
+        if( game->is_exiting_stage ) {
+            Color fade = ColorAlpha(
+                WHITE, fmin( game->exit_stage_timer / LEVEL_EXIT_FADE_TIME, 1.0f ) );
+            DrawRectangleRec( { 0.0, 0.0, screen.x, screen.y }, fade );
+
+            const char* time_text;
+            if( game->total_enemy_count && game->total_battery_count ) {
+                time_text = TextFormat(
+                    "TIME:      %.3f\n"
+                    "ENEMIES:   %i / %i\n"
+                    "BATTERIES: %i / %i",
+                    game->level_timer,
+                    game->total_enemy_count - game->enemy_counter,
+                    game->total_enemy_count,
+                    game->total_battery_count - game->battery_counter,
+                    game->total_battery_count );
+
+            } else if( game->total_enemy_count ) {
+                time_text = TextFormat(
+                    "TIME:      %.3f\n"
+                    "ENEMIES:   %i / %i",
+                    game->level_timer,
+                    game->total_enemy_count - game->enemy_counter,
+                    game->total_enemy_count );
+            } else if( game->total_battery_count ) {
+                time_text = TextFormat(
+                    "TIME:      %.3f\n"
+                    "BATTERIES: %i / %i",
+                    game->level_timer,
+                    game->total_battery_count - game->battery_counter,
+                    game->total_battery_count
+                );
+            } else {
+                time_text = TextFormat( "TIME: %.3f", game->level_timer );
+            }
+
+            float fsize = 48;
+            Vector2 time_text_size =
+                MeasureTextEx( state->persistent.font, time_text, fsize, 1.0 );
+
+            Vector2 offset = { 0.0f, -48.0f };
+            DrawTextPro(
+                state->persistent.font, time_text, 
+                (screen / 2.0) + offset, (time_text_size / 2.0), 0.0,
+                fsize, 1.0f, RED );
         }
 
 #if !defined(RELEASE)
@@ -1683,16 +2043,16 @@ void upload_obj( GlobalState* state, Object& obj ) {
         buf_append( objects, obj );
     }
 }
-void spawn_enemy( GlobalState* state, Vector3 position, float rotation, float radius ) {
-    Object obj = Object::create_enemy( position, rotation, radius );
+void spawn_enemy( GlobalState* state, Vector3 position, float rotation, float radius, float power ) {
+    Object obj = Object::create_enemy( position, rotation, radius, power );
     upload_obj( state, obj );
 }
 void spawn_battery( GlobalState* state, Vector2 position ) {
     Object obj = Object::create_battery( position );
     upload_obj( state, obj );
 }
-void spawn_level_exit( GlobalState* state, Vector2 position ) {
-    Object obj = Object::create_level_exit( position );
+void spawn_level_exit( GlobalState* state, Vector2 position, LevelCondition condition ) {
+    Object obj = Object::create_level_exit( position, condition );
     upload_obj( state, obj );
 }
 void load_next_map( GlobalState* state ) {
@@ -1702,8 +2062,35 @@ void load_map( GlobalState* state, const char* path ) {
     auto* game   = &state->transient.game;
     state->timer = 0.0;
 
+    game->pause_menu_state.reset_level = false;
+
+    game->is_exiting_stage = false;
+    game->exit_stage_timer = 0;
+    game->level_timer      = 0;
+
+    game->enemy_counter     = 0;
+    game->total_enemy_count = 0;
+
+    game->battery_counter     = 0;
+    game->total_battery_count = 0;
+
     player_init( &game->player );
     camera_init( &game->camera );
+
+    switch( running_map_counter % 4 ) {
+        case 0: {
+            game->materials.wall.maps->texture = game->textures.wall2;
+        } break;
+        case 1: {
+            game->materials.wall.maps->texture = game->textures.wall4;
+        } break;
+        case 2: {
+            game->materials.wall.maps->texture = game->textures.wall3;
+        } break;
+        case 3: {
+            game->materials.wall.maps->texture = game->textures.wall;
+        } break;
+    }
 
     int size = 0;
     unsigned char* data = LoadFileData( path, &size );
@@ -1749,6 +2136,8 @@ void load_map( GlobalState* state, const char* path ) {
                 spawn_enemy(
                     state, { o->position.x, 0.0, o->position.y },
                     o->rotation, E_DEFAULT_RADIUS );
+                game->enemy_counter++;
+                game->total_enemy_count++;
             } break;
 
             case ObjectType::PLAYER_SPAWN: {
@@ -1757,9 +2146,12 @@ void load_map( GlobalState* state, const char* path ) {
 
             case ObjectType::BATTERY: {
                 spawn_battery( state, o->position );
+                game->battery_counter++;
+                game->total_battery_count++;
             } break;
             case ObjectType::LEVEL_EXIT: {
-                spawn_level_exit( state, o->position );
+                spawn_level_exit( state, o->position, o->level_exit.condition );
+                game->condition = o->level_exit.condition;
             } break;
             case ObjectType::NONE:
             case ObjectType::COUNT: break;
@@ -1783,11 +2175,12 @@ void DrawPlane(
     Vector2 size, Color color
 ) {
     // NOTE: Plane is always created on XZ ground
+    rlSetTexture(mat.maps->texture.id);
+
     rlPushMatrix();
         rlTranslatef(centerPos.x, centerPos.y, centerPos.z);
         rlScalef(size.x, 1.0f, size.y);
 
-        rlSetTexture( mat.maps->texture.id );
         rlBegin(RL_QUADS);
             rlColor4ub(color.r, color.g, color.b, color.a);
 
@@ -1804,10 +2197,7 @@ void DrawPlane(
 
             rlTexCoord2f( texture_tile.x, 0.0 );
             rlVertex3f(  0.5f, 0.0f, -0.5f );
-
-            // rlVertex3f(  0.5f, 0.0f,  0.5f );
         rlEnd();
-        rlSetTexture(0);
     rlPopMatrix();
 }
 void DrawPlaneInv(
@@ -1815,11 +2205,12 @@ void DrawPlaneInv(
     Vector2 size, Color color
 ) {
     // NOTE: Plane is always created on XZ ground
+    rlSetTexture(mat.maps->texture.id);
+
     rlPushMatrix();
         rlTranslatef(centerPos.x, centerPos.y, centerPos.z);
         rlScalef(size.x, 1.0f, size.y);
 
-        rlSetTexture( mat.maps->texture.id );
         rlBegin(RL_QUADS);
             rlColor4ub(color.r, color.g, color.b, color.a);
 
@@ -1837,7 +2228,6 @@ void DrawPlaneInv(
             rlTexCoord2f( 0.0, texture_tile.y );
             rlVertex3f(  0.5f, 0.0f,  0.5f );
         rlEnd();
-        rlSetTexture(0);
     rlPopMatrix();
 }
 Vector2 world_collision_check(

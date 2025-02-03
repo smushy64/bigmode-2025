@@ -10,6 +10,7 @@
 #include "raymath.h"
 #include "rlgl.h"
 
+#include "shared/level.h"
 #include "shared/world.h"
 #include "editor/map.h"
 #include <stdlib.h>
@@ -32,8 +33,8 @@ Vector3 v3( float x ) { return v3( x, x, x ); }
 #define TOP_PANEL_HEIGHT    ( 12 + FONT_SIZE)
 #define SIDE_PANEL_WIDTH    (300)
 
-#define OBJECT_RADIUS (0.1f)
-#define VERTEX_RADIUS (0.05f)
+#define OBJECT_RADIUS (0.5f)
+#define VERTEX_RADIUS (0.5f)
 
 void DrawRectangleLinesRec( Rectangle rect, Color color );
 
@@ -50,6 +51,7 @@ int mode_key( Mode mode );
 
 const char* collate_modes();
 const char* collate_objects();
+const char* collate_level_conditions();
 
 enum class SelectionType {
     NONE,
@@ -160,6 +162,7 @@ struct State {
                 } position;
 
                 bool type_edit;
+                bool condition_edit;
             } object;
             struct {
                 struct {
@@ -230,6 +233,7 @@ int main() {
 
     const char* modes = collate_modes();
     const char* object_sc_list = collate_objects();
+    const char* level_condition_list = collate_level_conditions();
 
     set_mode( state, Mode::SELECT );
 
@@ -963,6 +967,23 @@ int main() {
                         }
                         setting.y += setting.height + GUI_GUTTER;
 
+                        if( state.selection.object->type == ObjectType::LEVEL_EXIT ) {
+                            text_width = MeasureTextEx( font, "Condition", FONT_SIZE, 1.0 );
+                            GuiLabel( setting, "Condition" );
+
+                            if( GuiDropdownBox( {
+                                setting.x + text_width.x + GUI_GUTTER, setting.y,
+                                setting.width - (text_width.x + GUI_GUTTER), setting.height },
+                                level_condition_list,
+                                (int*)&state.selection.object->level_exit.condition,
+                                state.inspector.object.condition_edit
+                            ) ) {
+                                state.inspector.object.condition_edit =
+                                    !state.inspector.object.condition_edit;
+                            }
+                            setting.y += setting.height + GUI_GUTTER;
+                        }
+
                         state.inspector.is_dirty = false;
                     } break;
                     case SelectionType::VERTEX: {
@@ -1205,11 +1226,22 @@ void save_map( State& state, const char* p ) {
 
     for( int i = 0; i < st->objects.len; ++i ) {
         auto* o = st->objects.buf + i;
-        obj[i] = MapFileObject{
+        auto mfo = MapFileObject{
             o->position,
             o->type,
-            (uint16_t)((o->rotation / (M_PI * 2.0f)) * UINT16_MAX)
+            (uint16_t)((o->rotation / (M_PI * 2.0f)) * UINT16_MAX),
         };
+        switch( o->type ) {
+            case ObjectType::LEVEL_EXIT: {
+                mfo.level_exit.condition = o->level_exit.condition;
+            } break;
+            case ObjectType::NONE:
+            case ObjectType::PLAYER_SPAWN:
+            case ObjectType::ENEMY:
+            case ObjectType::BATTERY:
+            case ObjectType::COUNT: break;
+        }
+        obj[i] = mfo;
     }
 
     memcpy( vert, st->vertexes.buf, sizeof(Vector2) * st->vertexes.len );
@@ -1271,6 +1303,16 @@ void load_map( State& state, const char* path ) {
         o.position = obj[i].position;
         o.type     = obj[i].type;
         o.rotation = (((float)obj[i].rotation) / (float)UINT16_MAX) * (M_PI * 2.0f);
+        switch( obj[i].type ) {
+            case ObjectType::LEVEL_EXIT: {
+                o.level_exit.condition = obj[i].level_exit.condition;
+            } break;
+            case ObjectType::NONE:
+            case ObjectType::PLAYER_SPAWN:
+            case ObjectType::ENEMY:
+            case ObjectType::BATTERY:
+            case ObjectType::COUNT: break;
+        }
         buf_append( &st->objects, o );
     }
 
@@ -1438,6 +1480,29 @@ const char* collate_objects() {
     return result.buf;
 
 }
+const char* collate_level_conditions() {
+    struct {
+        char* buf;
+        int   len;
+        int   cap;
+    } result = {};
+
+    int count = (int)LevelCondition::COUNT;
+    for( int i = 0; i < count; ++i ) {
+        auto type = (LevelCondition)i;
+        const char* name = to_string( type );
+        while( *name ) {
+            buf_append( &result, *name++ );
+        }
+
+        if( i + 1 < count ) {
+            buf_append( &result, ';' );
+        }
+    }
+    buf_append( &result, 0 );
+    return result.buf;
+}
+
 const char* to_string( Mode mode ) {
     switch( mode ) {
         case Mode::SELECT: return TextFormat( "[%c] - Select Mode", mode_key( mode ) ); // "Select";

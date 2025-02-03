@@ -10,9 +10,11 @@
 #include "blit.h"
 
 void mode_intro_load( GlobalState* state ) {
-    state->transient.intro.bigmode_logo = LoadTexture( "resources/textures/logo.png" );
-    SetTextureFilter(
-        state->transient.intro.bigmode_logo, TEXTURE_FILTER_BILINEAR );
+    if( !IsTextureValid( state->persistent.tex_main_menu ) ) {
+        state->persistent.tex_main_menu = LoadTexture( "resources/textures/logo.png" );
+        SetTextureFilter(
+            state->persistent.tex_main_menu, TEXTURE_FILTER_BILINEAR );
+    }
 }
 void mode_intro_update( GlobalState* state, float dt ) {
     #define INTRO_LENGTH 1.25
@@ -30,9 +32,9 @@ void mode_intro_update( GlobalState* state, float dt ) {
     Rectangle src, dst;
 
     src = {};
-    rect_set_size( src, texture_size( state->transient.intro.bigmode_logo ) );
+    rect_set_size( src, texture_size( state->persistent.tex_main_menu ) );
     src.y      = 1.0;
-    src.height = 94.0;
+    src.height = 190.0;
 
     dst = centered_fit_to_screen( screen, rect_size(src) );
 
@@ -40,14 +42,13 @@ void mode_intro_update( GlobalState* state, float dt ) {
 
     t = fmin( sin( t * M_PI ) * 2.0, 1.0 );
 
-    DrawTexturePro( state->transient.intro.bigmode_logo, src, dst, {}, 0.0, WHITE );
+    DrawTexturePro( state->persistent.tex_main_menu, src, dst, {}, 0.0, WHITE );
 
     Color tint = ColorLerp( BLACK, {0, 0, 0, 0}, t );
     DrawRectangle( 0, 0, screen.x, screen.y, tint );
     EndDrawing();
 }
 void mode_intro_unload( GlobalState* state ) {
-    UnloadTexture( state->transient.intro.bigmode_logo );
 }
 
 #undef INTRO_LENGTH

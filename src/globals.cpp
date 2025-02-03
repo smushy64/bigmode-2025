@@ -7,16 +7,16 @@
 #include "globals.h"
 
 struct Globals {
-    Vector2 camera_sensitivity = { 1.0, 1.0 };
+    Vector2 camera_sensitivity = { 0.75f, 0.75f };
     bool    fxaa_on            = true;
 
-    bool inverse_x = false;
+    bool inverse_x = true;
     bool inverse_y = false;
 
     bool  mute         = false;
     float volume       = 0.5;
-    float volume_music = 1.0;
-    float volume_sfx   = 1.0;
+    float volume_music = 0.6;
+    float volume_sfx   = 0.8;
 
     Font game_font;
 } globals;

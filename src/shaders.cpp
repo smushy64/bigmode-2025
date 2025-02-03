@@ -65,6 +65,65 @@ mat3 inverse( mat3 m ) {
 
 )";
 
+const char basic_shading_wall_frag[] = R"(
+#version 100
+
+precision mediump float;
+
+varying vec3 v2f_position;
+varying vec2 v2f_uv;
+varying vec4 v2f_color;
+varying vec3 v2f_normal;
+
+/* FROM RAYLIB */
+
+uniform sampler2D texture0;
+
+/* FROM RAYLIB */
+
+uniform vec3  camera_position;
+uniform vec2  clipping_planes;
+uniform float dist;
+uniform int   apply_dist;
+
+float invmix( float a, float b, float v ) {
+    return ( v - a ) / ( b - a );
+}
+float remap( float imin, float imax, float omin, float omax, float v ) {
+    float t = invmix( imin, imax, v );
+    return mix( omin, omax, t );
+}
+
+void main() {
+    float density    = 0.05;
+    float d          = length( v2f_position - camera_position );
+    float fog_factor = clamp( exp( -density * d ), 0.0, 1.0 );
+
+    vec2 uv = vec2(
+        (apply_dist != 0) ? mod(v2f_uv.x * dist * 0.1, 1.0) : v2f_uv.x, v2f_uv.y );
+
+    vec3 normal      = normalize( v2f_normal );
+    vec3 base_color  = texture2D( texture0, uv ).rgb;
+    vec3 from_camera = normalize( camera_position - v2f_position );
+
+    vec3 color = v2f_color.rgb * base_color;
+
+    vec3 ambient = color * vec3( 0.24, 0.24, 0.32 );
+
+    float light_mask = max( dot( from_camera, normal ), 0.0 );
+    light_mask = remap( 0.0, 1.0, 0.1, 1.0, light_mask );
+
+    vec3 frag_color = (color * light_mask) + (ambient * (1.0 - light_mask));
+    vec3 fog_color  = frag_color * vec3( 0.28, 0.28, 0.4);
+
+    vec3 final_color = mix( fog_color, frag_color, fog_factor );
+
+    gl_FragColor = vec4( final_color, 1.0 );
+    // gl_FragColor = vec4( vec3( fog_factor ), 1.0 );
+}
+
+)";
+
 const char basic_shading_frag[] = R"(
 #version 100
 

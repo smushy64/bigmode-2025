@@ -28,6 +28,10 @@ bool draw_pause_menu( GuiPauseMenu& state ) {
     r_menu.x = (screen.x / 2.0) - (r_menu.width  / 2.0);
     r_menu.y = (screen.y / 2.0) - (r_menu.height / 2.0);
 
+#if !defined(PLATFORM_WEB)
+    r_menu.height += 35.0;
+#endif
+
     if( GuiWindowBox( r_menu, "Paused" ) ) {
         return false;
     }
@@ -37,7 +41,6 @@ bool draw_pause_menu( GuiPauseMenu& state ) {
     r_menu.width  -= gutter * 2.0;
     r_menu.y      += 35.0;
     r_menu.height -= 35.0;
-
     const static float button_spacing = 10.0;
     const static float button_height  = 30.0;
     Rectangle r_button = r_menu;
@@ -45,6 +48,11 @@ bool draw_pause_menu( GuiPauseMenu& state ) {
 
     if( GuiButton( r_button, "Resume" ) ) {
         return false;
+    }
+    r_button.y += button_spacing + button_height;
+    if( GuiButton( r_button, "Reset Level" ) ) {
+        state.reset_level = true;
+        return true;
     }
     r_button.y += button_spacing + button_height;
     if( GuiButton( r_button, "Options" ) ) {
@@ -194,17 +202,17 @@ bool draw_credits_menu() {
     group_box_rect.height += 24.0;
 
     GuiLabel( left_rect, "Sergio Marmarian" );
-    GuiLabel( right_rect, "Art" );
-    right_rect.y = left_rect.y += 24.0;
-    group_box_rect.height += 24.0;
-
-    GuiLabel( left_rect, "Jack Ma" );
-    GuiLabel( right_rect, "Art" );
+    GuiLabel( right_rect, "3D Art & Animation" );
     right_rect.y = left_rect.y += 24.0;
     group_box_rect.height += 24.0;
 
     GuiLabel( left_rect, "Clayton Dryden" );
-    GuiLabel( right_rect, "Music and Sound Effects" );
+    GuiLabel( right_rect, "Music and Sound Design" );
+    right_rect.y = left_rect.y += 24.0;
+    group_box_rect.height += 24.0;
+
+    GuiLabel( left_rect, "Jack Ma" );
+    GuiLabel( right_rect, "Additional Art" );
     group_box_rect.height += 24.0;
 
     GuiGroupBox( group_box_rect, "Team" );

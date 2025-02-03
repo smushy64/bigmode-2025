@@ -10,6 +10,7 @@
 #include "enemy.h"
 #include <stdint.h>
 #include <stddef.h>
+#include "shared/level.h"
 
 enum class ObjectType {
     NONE,
@@ -39,12 +40,12 @@ struct Object {
         } battery;
 
         struct {
-
+            LevelCondition condition;
         } level_exit;
     };
 
     static inline
-    Object create_enemy( Vector3 position, float rotation, float radius = 5.0f ) {
+    Object create_enemy( Vector3 position, float rotation, float radius = 5.0f, float power = 50.0f ) {
         Object result = {};
         result.position  = position;
         result.type      = ObjectType::ENEMY;
@@ -53,7 +54,7 @@ struct Object {
         result.enemy.state  = EnemyState::IDLE;
         result.enemy.home   = position;
         result.enemy.radius = radius;
-        result.enemy.power  = 100.0f;
+        result.enemy.power  = power;
         result.enemy.facing_direction =
             Vector3RotateByAxisAngle( Vector3UnitX, Vector3UnitY, rotation );
         return result;
@@ -68,11 +69,12 @@ struct Object {
         return result;
     }
     static inline
-    Object create_level_exit( Vector2 position ) {
+    Object create_level_exit( Vector2 position, LevelCondition condition ) {
         Object result = {};
         result.type      = ObjectType::LEVEL_EXIT;
         result.is_active = true;
         result.position  = { position.x, 0.0, position.y };
+        result.level_exit.condition = condition;
         return result;
     }
 };

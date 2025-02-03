@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include "raylib.h"
 #include "shared/object.h"
+#include "shared/level.h"
 
 #define MAP_IDENTIFIER "BM25"
 #define MAP_EXT        ".map"
@@ -27,6 +28,11 @@ struct MapFileObject {
     Vector2    position;
     ObjectType type;
     uint16_t   rotation;
+    union {
+        struct {
+            LevelCondition condition;
+        } level_exit;
+    };
 };
 static_assert(sizeof(MapFileObject) == 16, "What?" );
 

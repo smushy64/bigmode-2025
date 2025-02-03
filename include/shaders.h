@@ -9,6 +9,7 @@
 
 extern const char basic_shading_vert[];
 extern const char basic_shading_frag[];
+extern const char basic_shading_wall_frag[];
 extern const char post_process_frag[];
 
 #endif /* header guard */

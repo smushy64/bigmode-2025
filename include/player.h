@@ -13,33 +13,33 @@
 
 readonly() float ANIMATION_TIME = 1.0 / 60.0;
 
-readonly() float   CAMERA_MIN_ROTATION = -15 * ( M_PI / 180.0 );
-readonly() float   CAMERA_MAX_ROTATION =  60 * ( M_PI / 180.0 );
-readonly() float   CAMERA_DISTANCE   = 6.0;
-readonly() float   CAMERA_HEIGHT     = 2.0;
+readonly() float   CAMERA_MIN_ROTATION  = -15 * ( M_PI / 180.0 );
+readonly() float   CAMERA_MAX_ROTATION  = 60 * ( M_PI / 180.0 );
+readonly() float   CAMERA_DISTANCE      = 6.0;
+readonly() float   CAMERA_HEIGHT        = 2.0;
 readonly() Vector3 CAMERA_TARGET_OFFSET = { 0.0, 1.35, 0.0 };
 
-readonly() float PLAYER_COLLISION_RADIUS   = 1.0;
+readonly() float PLAYER_COLLISION_RADIUS   = 0.6;
 readonly() float PLAYER_COLLISION_RADIUS_2 = PLAYER_COLLISION_RADIUS * PLAYER_COLLISION_RADIUS;
 
 readonly() float MAX_WALK_VELOCITY = 12.0;
 readonly() float MAX_RUN_VELOCITY  = 25.0;
 
-readonly() float STOP_DRAG         = 10.0;
-readonly() float TURN_SPEED        = 30.0;
+readonly() float STOP_DRAG  = 10.0;
+readonly() float TURN_SPEED = 40.0;
 
 readonly() float START_MAX_POWER         = 100.0;
 readonly() float POWER_LOSS_RATE         = 1.2;
 readonly() float POWER_LOSS_IDLE_MULT    = 0.2;
 readonly() float POWER_LOSS_RUNNING_MULT = 2.0;
 
-readonly() float POWER_LOSS_ATTACK =  8.0;
-readonly() float POWER_LOSS_DODGE  = 10.0;
+readonly() float POWER_LOSS_ATTACK = 8.0;
+readonly() float POWER_LOSS_DODGE  = 4.0;
 
 readonly() float DODGE_TIME  = 0.45;
-readonly() float DODGE_SPEED = 15.0;
+readonly() float DODGE_SPEED = 20.0;
 
-readonly() float DODGE_COOLDOWN_TIME = DODGE_TIME + 0.2;
+readonly() float DODGE_COOLDOWN_TIME = 0.0;
 
 readonly() float TAKING_DAMAGE_TIME = 0.3;
 
@@ -102,6 +102,8 @@ struct Player {
 
     float animation_timer;
     int   animation_frame;
+
+    bool attack_landed;
 };
 
 #undef readonly

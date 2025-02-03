@@ -13,6 +13,7 @@
 struct GuiPauseMenu {
     bool is_options_open;
     bool quit_to_menu;
+    bool reset_level;
 };
 
 bool draw_pause_menu( GuiPauseMenu& state );

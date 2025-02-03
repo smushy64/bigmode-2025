@@ -17,7 +17,8 @@
 
 #include <string.h>
 
-#define DEBUG_START_MODE Mode::GAME
+#define DEBUG_START_MODE \
+    Mode::GAME
 
 GlobalState* global_state;
 
@@ -42,6 +43,16 @@ bool initialize() {
     state->sh_basic_shading = LoadShaderFromMemory( basic_shading_vert, basic_shading_frag );
     state->sh_basic_shading_loc_camera_position =
         GetShaderLocation( state->sh_basic_shading, "camera_position" );
+
+    state->sh_wall = LoadShaderFromMemory( basic_shading_vert, basic_shading_wall_frag );
+    state->sh_wall_loc_camera_position =
+        GetShaderLocation( state->sh_wall, "camera_position" );
+    state->sh_wall_loc_dist =
+        GetShaderLocation( state->sh_wall, "dist" );
+    state->sh_wall_loc_apply_dist =
+        GetShaderLocation( state->sh_wall, "apply_dist" );
+    state->sh_wall_loc_clipping_planes =
+        GetShaderLocation( state->sh_wall, "clipping_planes" );
 
     state->sh_post_process = LoadShaderFromMemory( 0, post_process_frag );
     state->sh_post_process_loc_resolution =
