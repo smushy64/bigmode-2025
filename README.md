@@ -63,10 +63,10 @@ Binary will be in `build/windows` or `build/linux` depending on the target platf
 
 ## Credits
 
-- [Alicia Amarilla](https//github.com/smushy64)              : Programmer and Artist
-- [Sergio Marmarian](https//www.artstation.com/ngontopology) : Artist
-- [Jack Ma](https://jackmatoons.carrd.co/)                   : Artist
-- [Clayton Dryden](https://soundcloud.com/claydryn)          : Music
+- [Alicia Amarilla](https//github.com/smushy64)              : Programming and Art
+- [Sergio Marmarian](https//www.artstation.com/ngontopology) : 3D Art & Animations
+- [Clayton Dryden](https://soundcloud.com/claydryn)          : Music & Sound Design
+- [Jack Ma](https://jackmatoons.carrd.co/)                   : Additional Art
 
 ### External Resources
 
